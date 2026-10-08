@@ -1,0 +1,2305 @@
+{
+  "$comment": "Single source of truth for the posterly MCP tool surface: which set each tool belongs to, its human label, its views/actions (sub tools), confirm level, and annotation hints, plus renamed-tool aliases. Loaded by mcp-server/src/index.ts (stdio) and lib/mcp/tool-registry.ts (hosted); checked by scripts/check-mcp-tool-design.ts. Rules: docs/mcp-tool-design.md. Param-driven modes (for example update_post status vs content edits) are still recorded as views/actions so the action count is derived from this file. Aliases may add `mode` to force a param-driven mode, and param specs may be `nullable`. A param-driven mode is chosen by its `when` params.",
+  "version": 1,
+  "designRules": "on",
+  "budgets": {
+    "maxTotal": 70,
+    "maxCore": 30
+  },
+  "sunset": "2027-01-12",
+  "toolsets": {
+    "core": {
+      "label": "Core",
+      "description": "Accounts, posting, media, schedule, analytics, and support. What most assistants need."
+    },
+    "creative": {
+      "label": "Creative",
+      "description": "AI image and video generation, jobs, and post suggestions."
+    },
+    "inbox": {
+      "label": "Inbox",
+      "description": "Social inbox comments and DMs."
+    },
+    "google_business": {
+      "label": "Google Business",
+      "description": "Google Business Profile reviews, media, and audits."
+    },
+    "admin": {
+      "label": "Admin",
+      "description": "API keys, OAuth clients, webhooks, workspace members, and the publishing pause."
+    },
+    "billing": {
+      "label": "Billing",
+      "description": "Subscription changes."
+    },
+    "signup": {
+      "label": "Signup",
+      "description": "Pre-auth signup for brand-new users. Local npm package only; always on.",
+      "alwaysOn": true,
+      "surfaces": [
+        "stdio"
+      ]
+    }
+  },
+  "tools": {
+    "get_agent_signup_info": {
+      "set": "signup",
+      "label": "Signup info for agents",
+      "surfaces": [
+        "stdio"
+      ],
+      "exception": {
+        "category": "signup",
+        "reason": "Pre-auth signup help before any API key exists; local npm package only."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "start_signup": {
+      "set": "signup",
+      "label": "Start a paid signup",
+      "surfaces": [
+        "stdio"
+      ],
+      "exception": {
+        "category": "signup",
+        "reason": "Starts a paid signup before any API key exists; local npm package only."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "get_signup_session": {
+      "set": "signup",
+      "label": "Check a signup session",
+      "surfaces": [
+        "stdio"
+      ],
+      "exception": {
+        "category": "signup",
+        "reason": "Polls a pre-auth signup session before any API key exists; local npm package only."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "whoami": {
+      "set": "core",
+      "label": "Who am I",
+      "exception": {
+        "category": "report",
+        "reason": "The first call of every session: identity, scopes, workspaces, onboarding, and the MCP connection status report."
+      },
+      "selector": "view",
+      "defaultMode": "identity",
+      "views": {
+        "identity": {
+          "label": "You, your scopes, and your workspaces",
+          "openWorld": false,
+          "params": {}
+        },
+        "status": {
+          "label": "MCP server and connection status",
+          "openWorld": true,
+          "params": {}
+        }
+      }
+    },
+    "create_api_key": {
+      "set": "admin",
+      "label": "Create an API key",
+      "exception": {
+        "category": "secret",
+        "reason": "Returns the new API key secret once; kept apart so the secret never mixes with other output."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": "confirm"
+    },
+    "delete_api_key": {
+      "set": "admin",
+      "label": "Revoke an API key",
+      "exception": {
+        "category": "secret",
+        "reason": "Revokes an API key secret; kept next to create_api_key, which returns the secret once."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "confirm"
+    },
+    "list_workspace_members": {
+      "set": "admin",
+      "label": "Workspace members",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "manage_workspace_member": {
+      "set": "admin",
+      "label": "Manage a workspace member",
+      "selector": "action",
+      "actions": {
+        "invite": {
+          "label": "Invite a colleague",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview"
+        },
+        "update": {
+          "label": "Change role or brands",
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview"
+        },
+        "remove": {
+          "label": "Remove a member or invite",
+          "destructive": true,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview"
+        }
+      }
+    },
+    "list_publishing_pauses": {
+      "set": "admin",
+      "label": "Publishing pause",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "manage_publishing_pause": {
+      "set": "admin",
+      "label": "Pause or resume publishing",
+      "selector": "action",
+      "actions": {
+        "pause": {
+          "label": "Pause publishing",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "confirm",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "brand_id": {
+              "type": "string"
+            }
+          }
+        },
+        "resume": {
+          "label": "Resume publishing",
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "none",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "brand_id": {
+              "type": "string"
+            }
+          }
+        },
+        "publish_missed": {
+          "label": "Publish missed posts now",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "confirm",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "post_ids": {
+              "type": "array",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "list_accounts": {
+      "set": "core",
+      "label": "Connected accounts",
+      "selector": "view",
+      "defaultMode": "accounts",
+      "views": {
+        "accounts": {
+          "label": "Connected accounts",
+          "openWorld": false,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "string"
+            }
+          }
+        },
+        "learned_voice": {
+          "label": "Learned voice of an account",
+          "openWorld": false,
+          "params": {
+            "account_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "performance_profile": {
+          "label": "Performance profile of an account",
+          "openWorld": false,
+          "params": {
+            "account_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "connect_session": {
+          "label": "Check a connect session",
+          "openWorld": true,
+          "params": {
+            "session_id": {
+              "type": "string",
+              "required": true
+            },
+            "debug": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "disconnect_account": {
+      "set": "core",
+      "label": "Disconnect an account",
+      "exception": {
+        "category": "connect",
+        "reason": "Account connection step with its own explicit confirm; folding it into a read tool would mark onboarding destructive."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "connect_account": {
+      "set": "core",
+      "label": "Connect with credentials",
+      "exception": {
+        "category": "connect",
+        "reason": "Headless credential connection, an onboarding step that must not be marked destructive."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "create_connect_session": {
+      "set": "core",
+      "label": "Start a connect session",
+      "exception": {
+        "category": "connect",
+        "reason": "Starts the most common onboarding step; folding it into a tool that also disconnects would trigger permission prompts on the first call."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "list_oauth_clients": {
+      "set": "admin",
+      "label": "OAuth clients",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "manage_oauth_client": {
+      "set": "admin",
+      "label": "Manage an OAuth client",
+      "selector": "action",
+      "actions": {
+        "create": {
+          "label": "Create an OAuth client",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": "confirm",
+          "params": {
+            "client_name": {
+              "type": "string",
+              "required": true
+            },
+            "description": {
+              "type": "string"
+            },
+            "homepage": {
+              "type": "string"
+            },
+            "allowed_redirect_uris": {
+              "type": "array",
+              "required": true
+            },
+            "default_scopes": {
+              "type": "array",
+              "required": true
+            },
+            "is_active": {
+              "type": "boolean"
+            }
+          }
+        },
+        "update": {
+          "label": "Update an OAuth client",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "confirm",
+          "params": {
+            "client_id": {
+              "type": "string",
+              "required": true
+            },
+            "client_name": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "homepage": {
+              "type": "string"
+            },
+            "allowed_redirect_uris": {
+              "type": "array"
+            },
+            "default_scopes": {
+              "type": "array"
+            },
+            "is_active": {
+              "type": "boolean"
+            }
+          }
+        },
+        "delete": {
+          "label": "Delete an OAuth client",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "preview",
+          "params": {
+            "client_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "list_platforms": {
+      "set": "core",
+      "label": "Platforms",
+      "selector": "view",
+      "defaultMode": "platforms",
+      "views": {
+        "platforms": {
+          "label": "Supported platforms",
+          "openWorld": false,
+          "params": {
+            "include_planned": {
+              "type": "boolean"
+            }
+          }
+        },
+        "schema": {
+          "label": "Platform or account schema",
+          "openWorld": false,
+          "params": {
+            "account_id": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "include_planned": {
+              "type": "boolean"
+            }
+          }
+        },
+        "connect_link": {
+          "label": "Connection links",
+          "openWorld": false,
+          "params": {
+            "target": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "type": "string"
+            },
+            "include_planned": {
+              "type": "boolean"
+            },
+            "debug": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    },
+    "trigger_platform_helper": {
+      "set": "core",
+      "label": "Run a platform helper",
+      "exception": {
+        "category": "dispatcher",
+        "reason": "Routes to many platform-specific helpers (Pinterest boards, TikTok creator info, X quota, ...)."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "list_brands": {
+      "set": "core",
+      "label": "Brands",
+      "selector": "view",
+      "defaultMode": "brands",
+      "views": {
+        "brands": {
+          "label": "All brands",
+          "openWorld": false,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "brand": {
+          "label": "One brand",
+          "openWorld": false,
+          "params": {
+            "brand_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "accounts": {
+          "label": "Brand accounts",
+          "openWorld": false,
+          "params": {
+            "brand_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "profile": {
+          "label": "Brand profile",
+          "openWorld": false,
+          "params": {
+            "brand_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "list_post_suggestions": {
+      "set": "creative",
+      "label": "Post suggestions",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "dismiss_suggestion": {
+      "set": "creative",
+      "label": "Dismiss a suggestion",
+      "exception": {
+        "category": "single_action",
+        "reason": "Dismissing is the only change a suggestion supports, so a manage_ wrapper would add nothing."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "list_posts": {
+      "set": "core",
+      "label": "Posts",
+      "selector": "view",
+      "defaultMode": "list",
+      "views": {
+        "list": {
+          "label": "Posts, one page at a time",
+          "openWorld": false,
+          "params": {
+            "status": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "type": "string"
+            },
+            "brand_id": {
+              "type": "string"
+            },
+            "approval_status": {
+              "type": "string"
+            },
+            "approval_waiting_on": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string"
+            },
+            "scheduled_from": {
+              "type": "string"
+            },
+            "scheduled_to": {
+              "type": "string"
+            },
+            "order": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "min": 1,
+              "max": 200
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        },
+        "counts": {
+          "label": "Post counts by day, status, account, and brand",
+          "openWorld": false,
+          "params": {
+            "status": {
+              "type": "string"
+            },
+            "platform": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "type": "string"
+            },
+            "brand_id": {
+              "type": "string"
+            },
+            "approval_status": {
+              "type": "string"
+            },
+            "approval_waiting_on": {
+              "type": "string"
+            },
+            "timezone": {
+              "type": "string"
+            },
+            "scheduled_from": {
+              "type": "string",
+              "required": true
+            },
+            "scheduled_to": {
+              "type": "string",
+              "required": true
+            },
+            "order": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ]
+            },
+            "limit": {
+              "type": "number",
+              "min": 1,
+              "max": 200
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        }
+      }
+    },
+    "get_post": {
+      "set": "core",
+      "label": "One post",
+      "exception": {
+        "category": "report",
+        "reason": "Reads one post by ID plus its computed publish-readiness report (what is missing before it can publish)."
+      },
+      "selector": "view",
+      "defaultMode": "post",
+      "views": {
+        "post": {
+          "label": "One post",
+          "openWorld": false,
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            }
+          }
+        },
+        "missing": {
+          "label": "What a post is missing",
+          "openWorld": false,
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "ask_support": {
+      "set": "core",
+      "label": "Ask support",
+      "exception": {
+        "category": "feedback",
+        "reason": "Talks to posterly support (the support AI, then a human on explicit request)."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "find_available_slot": {
+      "set": "core",
+      "label": "Find a free slot",
+      "exception": {
+        "category": "report",
+        "reason": "Computes free posting slots from the schedule rather than listing records."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "submit_agent_feedback": {
+      "set": "core",
+      "label": "Agent feedback",
+      "exception": {
+        "category": "feedback",
+        "reason": "Sends private operational feedback to the posterly team."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "submit_product_feedback": {
+      "set": "core",
+      "label": "Product feedback",
+      "exception": {
+        "category": "feedback",
+        "reason": "Files a bug, idea, or feedback on the public posterly board."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "validate_post": {
+      "set": "core",
+      "label": "Validate a post",
+      "exception": {
+        "category": "publishing",
+        "reason": "The dry run of create_post; kept beside it so agents validate exactly what they will publish."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "create_post": {
+      "set": "core",
+      "label": "Create a post",
+      "exception": {
+        "category": "publishing",
+        "reason": "Creates or schedules content that goes out to a social network."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "create_posts_batch": {
+      "set": "core",
+      "label": "Create posts in bulk",
+      "exception": {
+        "category": "publishing",
+        "reason": "Creates or schedules up to 25 posts that go out to social networks."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "update_post": {
+      "set": "core",
+      "label": "Edit a post",
+      "exception": {
+        "category": "publishing",
+        "reason": "Changes content, schedule, or status of posts that go out to a social network."
+      },
+      "selector": "params",
+      "defaultMode": "edit",
+      "actions": {
+        "edit": {
+          "label": "Edit caption, media, schedule, or settings",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "confirm",
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "caption": {
+              "type": "string"
+            },
+            "scheduled_at": {
+              "type": "string"
+            },
+            "media_url": {
+              "type": "string"
+            },
+            "media_urls": {
+              "type": "array"
+            },
+            "post_type": {
+              "type": "string"
+            },
+            "metadata": {
+              "type": "object"
+            },
+            "settings": {
+              "type": "object"
+            },
+            "platform_settings": {
+              "type": "object"
+            },
+            "instagram_settings": {
+              "type": "object"
+            },
+            "reel_cover_url": {
+              "type": "string"
+            },
+            "reel_cover_method": {
+              "type": "string"
+            },
+            "reel_thumb_offset": {
+              "type": "number",
+              "min": 0
+            }
+          }
+        },
+        "status": {
+          "label": "Pause, resume, schedule, or move to draft",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "confirm",
+          "when": [
+            "status"
+          ],
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "scheduled",
+                "paused",
+                "draft"
+              ],
+              "required": true
+            },
+            "scheduled_at": {
+              "type": "string"
+            }
+          }
+        },
+        "release_id": {
+          "label": "Set a release or group ID",
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "confirm",
+          "when": [
+            "release_id"
+          ],
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "release_id": {
+              "type": "string",
+              "required": true
+            },
+            "group_id": {
+              "type": "string"
+            }
+          }
+        },
+        "approval": {
+          "label": "Request, approve, request changes, or reject client review",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "confirm",
+          "when": [
+            "approval_action"
+          ],
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "approval_action": {
+              "type": "string",
+              "enum": [
+                "request",
+                "approve",
+                "request_changes",
+                "reject"
+              ],
+              "required": true
+            },
+            "approval_axis": {
+              "type": "string",
+              "enum": [
+                "asset",
+                "caption"
+              ]
+            },
+            "approval_note": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "delete_post": {
+      "set": "core",
+      "label": "Delete posts",
+      "exception": {
+        "category": "publishing",
+        "reason": "Removes a post record or live platform content after explicit confirmation."
+      },
+      "selector": "params",
+      "defaultMode": "post",
+      "actions": {
+        "post": {
+          "label": "Delete one post",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "confirm",
+          "params": {
+            "post_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "confirm_published": {
+              "type": "boolean"
+            },
+            "delete_mode": {
+              "type": "string",
+              "enum": [
+                "posterly",
+                "platform"
+              ]
+            }
+          }
+        },
+        "group": {
+          "label": "Delete a post group",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": false,
+          "confirm": "preview",
+          "when": [
+            "group_id"
+          ],
+          "params": {
+            "group_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "get_x_posting_quota": {
+      "set": "core",
+      "label": "X posting quota",
+      "exception": {
+        "category": "money",
+        "reason": "Reports the paid X posting quota and add-on plan."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "upload_media": {
+      "set": "core",
+      "label": "Upload media",
+      "exception": {
+        "category": "single_action",
+        "reason": "Uploading is the only action; the url, base64, and file path options are input variants of it."
+      },
+      "selector": "params",
+      "defaultMode": "file",
+      "actions": {
+        "file": {
+          "label": "Upload a file",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": false,
+          "confirm": "none",
+          "params": {
+            "base64_data": {
+              "type": "string"
+            },
+            "file_path": {
+              "type": "string"
+            },
+            "filename": {
+              "type": "string",
+              "required": true
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "url": {
+          "label": "Upload from a URL",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "none",
+          "when": [
+            "url"
+          ],
+          "params": {
+            "url": {
+              "type": "string",
+              "required": true
+            },
+            "filename": {
+              "type": "string"
+            },
+            "content_type": {
+              "type": "string"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "create_signed_upload": {
+      "set": "core",
+      "label": "Signed upload link",
+      "exception": {
+        "category": "session",
+        "reason": "Starts a signed direct-to-storage upload session for large files."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "create_media_drop": {
+      "set": "core",
+      "label": "Media drop link",
+      "exception": {
+        "category": "session",
+        "reason": "Starts a human drop-page upload session."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "list_media": {
+      "set": "core",
+      "label": "Media library",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "get_video_options": {
+      "set": "creative",
+      "label": "Video options",
+      "exception": {
+        "category": "ai_generation",
+        "reason": "Read-only options and credit costs for AI video generation, checked before spending credits."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "run_video_function": {
+      "set": "creative",
+      "label": "Video helper",
+      "exception": {
+        "category": "dispatcher",
+        "reason": "Routes to the video generators' helper functions (input modes, cost estimate, request validation)."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "generate_video": {
+      "set": "creative",
+      "label": "Generate a video",
+      "exception": {
+        "category": "ai_generation",
+        "reason": "Spends AI credits to generate a video."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "list_jobs": {
+      "set": "creative",
+      "label": "AI jobs",
+      "selector": "type",
+      "views": {
+        "image": {
+          "label": "Image jobs",
+          "openWorld": true,
+          "params": {
+            "job_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 50
+            }
+          }
+        },
+        "video": {
+          "label": "Video jobs",
+          "openWorld": true,
+          "params": {
+            "job_id": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed",
+                "dismissed"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 50
+            }
+          }
+        }
+      }
+    },
+    "generate_captions": {
+      "set": "core",
+      "label": "Generate captions",
+      "exception": {
+        "category": "ai_generation",
+        "reason": "Uses the AI caption allowance to write caption options."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "generate_image": {
+      "set": "creative",
+      "label": "Generate an image",
+      "exception": {
+        "category": "ai_generation",
+        "reason": "Spends AI credits to generate an image."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "list_analytics": {
+      "set": "core",
+      "label": "Analytics",
+      "selector": "view",
+      "views": {
+        "accounts": {
+          "label": "Account analytics",
+          "openWorld": true,
+          "params": {
+            "account_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "presentation": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "table",
+                "json"
+              ]
+            }
+          }
+        },
+        "posts": {
+          "label": "Post analytics",
+          "openWorld": true,
+          "params": {
+            "account_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "from": {
+              "type": "string"
+            },
+            "to": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 200
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            },
+            "presentation": {
+              "type": "string",
+              "enum": [
+                "compact",
+                "table",
+                "json"
+              ]
+            }
+          }
+        },
+        "insights": {
+          "label": "Post insights",
+          "openWorld": false,
+          "params": {
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "post_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "checkpoint": {
+              "type": "string",
+              "enum": [
+                "1h",
+                "6h",
+                "24h",
+                "72h",
+                "7d"
+              ]
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 100
+            }
+          }
+        }
+      }
+    },
+    "list_google_business_reviews": {
+      "set": "google_business",
+      "label": "Google reviews",
+      "selector": "view",
+      "defaultMode": "reviews",
+      "views": {
+        "reviews": {
+          "label": "Google reviews",
+          "openWorld": true,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "rating": {
+              "type": "integer",
+              "min": 1,
+              "max": 5
+            },
+            "unanswered": {
+              "type": "boolean"
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 1000
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        },
+        "review_link": {
+          "label": "Google review link",
+          "openWorld": true,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "audit_google_business_profile": {
+      "set": "google_business",
+      "label": "Audit a Google profile",
+      "exception": {
+        "category": "report",
+        "reason": "Produces a computed profile audit with recommendations rather than listing records."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "manage_google_business_review": {
+      "set": "google_business",
+      "label": "Manage Google reviews",
+      "selector": "action",
+      "actions": {
+        "suggest_reply": {
+          "label": "Suggest a reply (never posts)",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "none",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "review_text": {
+              "type": "string"
+            },
+            "star_rating": {
+              "type": "number",
+              "min": 1,
+              "max": 5,
+              "required": true
+            },
+            "reviewer_name": {
+              "type": "string"
+            },
+            "business_name": {
+              "type": "string"
+            },
+            "tone": {
+              "type": "string",
+              "enum": [
+                "professional",
+                "friendly",
+                "apologetic"
+              ]
+            },
+            "count": {
+              "type": "integer",
+              "min": 1,
+              "max": 5
+            }
+          }
+        },
+        "reply": {
+          "label": "Reply to a review",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "preview",
+          "nonce": true,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "review_name": {
+              "type": "string",
+              "required": true
+            },
+            "comment": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "delete_reply": {
+          "label": "Delete a review reply",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "preview",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "review_name": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "list_google_business_media": {
+      "set": "google_business",
+      "label": "Google profile media",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "manage_google_business_media": {
+      "set": "google_business",
+      "label": "Manage Google profile media",
+      "selector": "action",
+      "actions": {
+        "add": {
+          "label": "Add a photo or video",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview",
+          "nonce": true,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "source_url": {
+              "type": "string",
+              "required": true
+            },
+            "category": {
+              "type": "string",
+              "required": true
+            },
+            "media_format": {
+              "type": "string",
+              "enum": [
+                "PHOTO",
+                "VIDEO"
+              ]
+            }
+          }
+        },
+        "delete": {
+          "label": "Delete a photo or video",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "preview",
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "location_id": {
+              "type": "string"
+            },
+            "media_name": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "list_conversations": {
+      "set": "inbox",
+      "label": "Conversations",
+      "selector": "params",
+      "defaultMode": "list",
+      "views": {
+        "list": {
+          "label": "List conversations",
+          "openWorld": false,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "platform": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string"
+            },
+            "search": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 100
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        },
+        "conversation": {
+          "label": "One conversation with its messages",
+          "openWorld": false,
+          "params": {
+            "conversation_id": {
+              "type": "string",
+              "required": true
+            },
+            "workspace_id": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 100
+            }
+          },
+          "when": [
+            "conversation_id"
+          ]
+        }
+      }
+    },
+    "manage_conversation": {
+      "set": "inbox",
+      "label": "Manage conversations",
+      "selector": "action",
+      "actions": {
+        "send": {
+          "label": "Send a DM",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview",
+          "nonce": true,
+          "params": {
+            "conversation_id": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": true
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "sync": {
+          "label": "Sync the inbox",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "none",
+          "params": {
+            "account_id": {
+              "type": "integer",
+              "min": 1,
+              "required": true
+            },
+            "sync_type": {
+              "type": "string",
+              "enum": [
+                "all",
+                "dm",
+                "comments"
+              ]
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "list_comments": {
+      "set": "inbox",
+      "label": "Comments",
+      "selector": "params",
+      "defaultMode": "list",
+      "views": {
+        "list": {
+          "label": "List comments",
+          "openWorld": false,
+          "params": {
+            "workspace_id": {
+              "type": "string"
+            },
+            "account_id": {
+              "type": "integer",
+              "min": 1
+            },
+            "platform": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string"
+            },
+            "search": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "min": 1,
+              "max": 100
+            },
+            "offset": {
+              "type": "integer",
+              "min": 0
+            }
+          }
+        },
+        "comment": {
+          "label": "One comment with its replies",
+          "openWorld": false,
+          "params": {
+            "comment_id": {
+              "type": "string",
+              "required": true
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          },
+          "when": [
+            "comment_id"
+          ]
+        }
+      }
+    },
+    "manage_comment": {
+      "set": "inbox",
+      "label": "Manage comments",
+      "selector": "action",
+      "actions": {
+        "reply": {
+          "label": "Reply to a comment",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "preview",
+          "nonce": true,
+          "params": {
+            "comment_id": {
+              "type": "string",
+              "required": true
+            },
+            "content": {
+              "type": "string",
+              "required": true
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "public",
+                "private"
+              ]
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "update": {
+          "label": "Hide or mark read",
+          "destructive": false,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "none",
+          "params": {
+            "comment_id": {
+              "type": "string",
+              "required": true
+            },
+            "is_hidden": {
+              "type": "boolean"
+            },
+            "is_read": {
+              "type": "boolean"
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        },
+        "delete": {
+          "label": "Delete a comment",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "preview",
+          "params": {
+            "comment_id": {
+              "type": "string",
+              "required": true
+            },
+            "workspace_id": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "list_activity": {
+      "set": "core",
+      "label": "Activity feed",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "list_webhooks": {
+      "set": "admin",
+      "label": "Webhooks",
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    },
+    "create_webhook": {
+      "set": "admin",
+      "label": "Create a webhook",
+      "exception": {
+        "category": "secret",
+        "reason": "Returns the webhook signing secret once."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": false,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "manage_webhook": {
+      "set": "admin",
+      "label": "Manage a webhook",
+      "selector": "action",
+      "actions": {
+        "update": {
+          "label": "Update a webhook",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "confirm",
+          "params": {
+            "webhook_id": {
+              "type": "string",
+              "required": true
+            },
+            "url": {
+              "type": "string"
+            },
+            "events": {
+              "type": "array"
+            },
+            "workspace_id": {
+              "type": "string",
+              "nullable": true
+            },
+            "description": {
+              "type": "string",
+              "nullable": true
+            },
+            "is_active": {
+              "type": "boolean"
+            }
+          }
+        },
+        "delete": {
+          "label": "Delete a webhook",
+          "destructive": true,
+          "idempotent": true,
+          "openWorld": true,
+          "confirm": "preview",
+          "params": {
+            "webhook_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        },
+        "test": {
+          "label": "Send a test delivery",
+          "destructive": false,
+          "idempotent": false,
+          "openWorld": true,
+          "confirm": "confirm",
+          "params": {
+            "webhook_id": {
+              "type": "string",
+              "required": true
+            }
+          }
+        }
+      }
+    },
+    "get_credits": {
+      "set": "core",
+      "label": "AI credits",
+      "exception": {
+        "category": "money",
+        "reason": "Reports the AI credit wallet balance the caller can spend."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "get_subscription": {
+      "set": "billing",
+      "label": "Subscription",
+      "exception": {
+        "category": "money",
+        "reason": "Reads the paid plan; kept beside the billing actions that change it."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "cancel_subscription": {
+      "set": "billing",
+      "label": "Cancel subscription",
+      "exception": {
+        "category": "money",
+        "reason": "Changes the paid plan."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "pause_subscription": {
+      "set": "billing",
+      "label": "Pause subscription",
+      "exception": {
+        "category": "money",
+        "reason": "Changes the paid plan."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "resume_subscription": {
+      "set": "billing",
+      "label": "Resume subscription",
+      "exception": {
+        "category": "money",
+        "reason": "Changes the paid plan."
+      },
+      "readOnly": false,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "none"
+    },
+    "downgrade_subscription": {
+      "set": "billing",
+      "label": "Downgrade subscription",
+      "exception": {
+        "category": "money",
+        "reason": "Changes the paid plan."
+      },
+      "readOnly": false,
+      "destructive": true,
+      "idempotent": true,
+      "openWorld": true,
+      "confirm": "confirm"
+    },
+    "get_updates": {
+      "set": "core",
+      "label": "Product updates",
+      "exception": {
+        "category": "report",
+        "reason": "Reads the posterly product updates feed, not the user's own records."
+      },
+      "readOnly": true,
+      "destructive": false,
+      "idempotent": true,
+      "openWorld": false,
+      "confirm": "none"
+    }
+  },
+  "aliases": {
+    "get_mcp_status": {
+      "target": "whoami",
+      "inject": {
+        "view": "status"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_connect_session": {
+      "target": "list_accounts",
+      "inject": {
+        "view": "connect_session"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_learned_voice": {
+      "target": "list_accounts",
+      "inject": {
+        "view": "learned_voice"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_performance_profile": {
+      "target": "list_accounts",
+      "inject": {
+        "view": "performance_profile"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_platform_schema": {
+      "target": "list_platforms",
+      "inject": {
+        "view": "schema"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_connect_link": {
+      "target": "list_platforms",
+      "inject": {
+        "view": "connect_link"
+      },
+      "rename": {
+        "platform": "target"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_brand": {
+      "target": "list_brands",
+      "inject": {
+        "view": "brand"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "list_brand_accounts": {
+      "target": "list_brands",
+      "inject": {
+        "view": "accounts"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_brand_profile": {
+      "target": "list_brands",
+      "inject": {
+        "view": "profile"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_post_missing": {
+      "target": "get_post",
+      "inject": {
+        "view": "missing"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "update_post_status": {
+      "target": "update_post",
+      "mode": "status",
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "update_post_release_id": {
+      "target": "update_post",
+      "mode": "release_id",
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_post_group": {
+      "target": "delete_post",
+      "mode": "group",
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "upload_media_from_url": {
+      "target": "upload_media",
+      "mode": "url",
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_account_analytics": {
+      "target": "list_analytics",
+      "inject": {
+        "view": "accounts"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_post_analytics": {
+      "target": "list_analytics",
+      "inject": {
+        "view": "posts"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_post_insights": {
+      "target": "list_analytics",
+      "inject": {
+        "view": "insights"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_image_job": {
+      "target": "list_jobs",
+      "inject": {
+        "type": "image"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_video_job": {
+      "target": "list_jobs",
+      "inject": {
+        "type": "video"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_comment": {
+      "target": "list_comments",
+      "mode": "comment",
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "reply_to_comment": {
+      "target": "manage_comment",
+      "inject": {
+        "action": "reply"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "update_comment": {
+      "target": "manage_comment",
+      "inject": {
+        "action": "update"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_comment": {
+      "target": "manage_comment",
+      "inject": {
+        "action": "delete"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_conversation": {
+      "target": "list_conversations",
+      "mode": "conversation",
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "send_message": {
+      "target": "manage_conversation",
+      "inject": {
+        "action": "send"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "sync_inbox": {
+      "target": "manage_conversation",
+      "inject": {
+        "action": "sync"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "get_google_business_review_link": {
+      "target": "list_google_business_reviews",
+      "inject": {
+        "view": "review_link"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "suggest_google_business_review_reply": {
+      "target": "manage_google_business_review",
+      "inject": {
+        "action": "suggest_reply"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "reply_google_business_review": {
+      "target": "manage_google_business_review",
+      "inject": {
+        "action": "reply"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_google_business_review_reply": {
+      "target": "manage_google_business_review",
+      "inject": {
+        "action": "delete_reply"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "add_google_business_media": {
+      "target": "manage_google_business_media",
+      "inject": {
+        "action": "add"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_google_business_media": {
+      "target": "manage_google_business_media",
+      "inject": {
+        "action": "delete"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "update_webhook": {
+      "target": "manage_webhook",
+      "inject": {
+        "action": "update"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_webhook": {
+      "target": "manage_webhook",
+      "inject": {
+        "action": "delete"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "test_webhook": {
+      "target": "manage_webhook",
+      "inject": {
+        "action": "test"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "create_oauth_client": {
+      "target": "manage_oauth_client",
+      "inject": {
+        "action": "create"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "update_oauth_client": {
+      "target": "manage_oauth_client",
+      "inject": {
+        "action": "update"
+      },
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    },
+    "delete_oauth_client": {
+      "target": "manage_oauth_client",
+      "inject": {
+        "action": "delete"
+      },
+      "legacyConfirm": true,
+      "added": "2026-09-24",
+      "sunset": "2027-01-12"
+    }
+  }
+}

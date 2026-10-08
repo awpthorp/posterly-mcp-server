@@ -1,0 +1,59 @@
+{
+  "name": "posterly-mcp-server",
+  "version": "0.50.5",
+  "mcpName": "io.github.awpthorp/posterly",
+  "description": "MCP server for posterly: schedule and publish social media posts across 18 platforms from any MCP client (Claude, ChatGPT, Cursor, Windsurf, Cline, and more)",
+  "license": "MIT",
+  "homepage": "https://github.com/awpthorp/posterly-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/awpthorp/posterly-mcp-server.git"
+  },
+  "bugs": {
+    "url": "https://github.com/awpthorp/posterly-mcp-server/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "posterly",
+    "social-media",
+    "scheduling",
+    "claude",
+    "cursor",
+    "chatgpt"
+  ],
+  "type": "module",
+  "bin": {
+    "posterly-mcp": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "tool-registry.json",
+    "tool-annotations.json",
+    "server.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "prepack": "npm run build",
+    "test:annotations": "npm run build && node scripts/test-tool-annotations.mjs",
+    "test:payloads": "npm run build && node scripts/test-payload-builders.mjs",
+    "test:client-header": "npm run build && node scripts/test-client-header-sanitization.mjs",
+    "test:alias-transport": "npm run build && node scripts/test-alias-transport.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.27.1",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

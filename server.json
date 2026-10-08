@@ -1,0 +1,44 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.awpthorp/posterly",
+  "title": "posterly",
+  "description": "Validate, schedule, publish, and analyze social content across 18 platforms with posterly.",
+  "version": "0.50.5",
+  "websiteUrl": "https://www.poster.ly/mcp",
+  "repository": {
+    "url": "https://github.com/awpthorp/posterly-mcp-server",
+    "source": "github"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "posterly-mcp-server",
+      "version": "0.50.5",
+      "transport": {
+        "type": "stdio"
+      },
+      "environmentVariables": [
+        {
+          "name": "POSTERLY_API_KEY",
+          "description": "posterly API key. Optional for public signup tools; required for authenticated tools.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "POSTERLY_TOOLSETS",
+          "description": "Optional. Comma-separated tool sets to list: core, creative, inbox, google_business, admin, billing (signup tools are always listed). Default: every set. Every tool stays callable by name.",
+          "format": "string",
+          "isRequired": false,
+          "isSecret": false
+        }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://www.poster.ly/api/mcp"
+    }
+  ]
+}
