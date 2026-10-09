@@ -60,7 +60,7 @@ export const manageGoogleBusinessMediaTool = {
     workspace_id: z.string().optional().describe('Filter to a workspace ID from whoami.'),
     account_id: z.number().int().positive().optional().describe('Google Business account ID from list_accounts.'),
     location_id: z.string().optional().describe(LOCATION_ID_DESCRIPTION),
-    source_url: z.string().url().optional().describe('add: public https URL of the photo or video (from upload_media).'),
+    source_url: z.string().url().optional().describe('add: public https URL of the photo or video (from upload_media). Photos must be JPG or PNG, 10 KB to 5 MB.'),
     category: z.enum(CATEGORIES).optional().describe('add: which gallery category to add the media to.'),
     media_format: z.enum(['PHOTO', 'VIDEO']).optional().describe('add: defaults to PHOTO. Use VIDEO for videos (Google caps profile videos at 30s / 75MB).'),
     media_name: z.string().min(1).optional().describe('delete: full media resource name from list_google_business_media (accounts/.../locations/.../media/...).'),

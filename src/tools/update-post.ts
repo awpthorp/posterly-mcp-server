@@ -70,6 +70,7 @@ const platformSettingsSchema = z.object({
   reel_thumb_offset: z.number().nonnegative().optional(),
   reply_settings: z.enum(['everyone', 'following', 'mentionedUsers', 'subscribers', 'verified']).optional(),
   poll: z.object({ options: z.array(z.string()), duration_minutes: z.number().positive().optional(), question: z.string().optional(), duration: z.enum(['ONE_DAY', 'THREE_DAYS', 'SEVEN_DAYS', 'FOURTEEN_DAYS']).optional(), allows_multiple_answers: z.boolean().optional() }).optional(),
+  article: z.object({ title: z.string(), cover: z.enum(['first_image', 'none']).optional() }).nullable().optional(),
   reply_control: z.enum(['everyone', 'accounts_you_follow', 'mentioned_only', 'followers_only', 'parent_post_author_only']).optional(),
   topic_tag: z.string().optional(),
   share_to_instagram: z.boolean().optional(), // Threads: also share the published post to the linked Instagram account as a Story

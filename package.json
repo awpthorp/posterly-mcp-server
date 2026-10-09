@@ -1,6 +1,6 @@
 {
   "name": "posterly-mcp-server",
-  "version": "0.50.5",
+  "version": "0.51.0",
   "mcpName": "io.github.awpthorp/posterly",
   "description": "MCP server for posterly: schedule and publish social media posts across 18 platforms from any MCP client (Claude, ChatGPT, Cursor, Windsurf, Cline, and more)",
   "license": "MIT",
