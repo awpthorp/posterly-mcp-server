@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
-import { code, mdKeyValue, mdQuote, mdSection } from '../lib/format.js';
+import { code, inboxCommentContext, mdKeyValue, mdQuote, mdSection } from '../lib/format.js';
 import { previewThenConfirm, readFailedNote, readForPreview, validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 type ManageCommentInput = {
@@ -93,10 +93,14 @@ async function describeComment(client: PosterlyClient, input: ManageCommentInput
     return [readFailedNote(read.error), mdKeyValue([['Comment ID', code(input.comment_id)], ['Workspace', input.workspace_id ? code(input.workspace_id) : undefined]])].join('\n\n');
   }
   const comment = read.data.comment;
+  const context = inboxCommentContext(comment);
   return mdSection('Comment', mdKeyValue([
     ['Comment ID', code(String(comment.id))],
     ['Platform', typeof comment.platform === 'string' ? comment.platform : 'unknown'],
+    ...(context.accountId ? [['Account ID', context.accountId] as [string, string]] : []),
     ['Author', typeof comment.author_username === 'string' ? `@${comment.author_username}` : 'unknown'],
+    ...(context.caption ? [['Post', context.caption] as [string, string]] : []),
+    ...(context.link ? [['Post link', context.link] as [string, string]] : []),
     ['Content', typeof comment.content === 'string' ? comment.content : '(empty)'],
   ]));
 }

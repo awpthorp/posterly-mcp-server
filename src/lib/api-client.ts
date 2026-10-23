@@ -51,9 +51,14 @@ export interface Account {
   platform: string;
   username: string;
   account_type?: string;
+  /** Google Business numeric location id (platform_user_id). Absent on other platforms. */
+  location_id?: string | null;
   profile_picture_url?: string;
   workspace_id?: string | null;
   connection_mode?: 'meta' | 'instagram_direct' | null;
+  connection_status?: 'ok' | 'needs_reconnect';
+  connection_reason?: 'reconnect_required' | 'access_token_expired' | null;
+  connection_since?: string | null;
   instagram_tagging?: {
     media_user_tags?: { supported?: boolean };
     collaborators?: { supported?: boolean };
@@ -188,6 +193,14 @@ export interface DismissSuggestionResponse {
   status: string;
 }
 
+export interface AcceptSuggestionResponse {
+  ok: boolean;
+  /** draft for a new save; the existing post's real status when already_saved (null if that post is gone). */
+  status: string | null;
+  post_id: number | null;
+  already_saved: boolean;
+}
+
 export type ApiPostApprovalStatus = 'none' | 'pending_client' | 'approved' | 'changes_requested' | 'rejected';
 
 export interface ApiPostApproval {
@@ -200,15 +213,30 @@ export interface ApiPostApproval {
   completed_at: string | null;
 }
 
+/** Who or what created a post. Any field is null when it was never recorded. */
+export interface ApiPostCreator {
+  user_id: string | null;
+  name: string | null;
+  source: string | null;
+  source_label: string | null;
+}
+
 export interface Post {
   id: number;
   content: string;
   scheduled_at: string;
+  created_at?: string | null;
+  updated_at?: string | null;
+  created_by?: ApiPostCreator | null;
   social_account_id: string;
   media_url?: string;
   media_urls?: string[];
   status: string;
   post_type?: string;
+  platform?: string | string[] | null;
+  post_group_id?: string | null;
+  platform_post_id?: string | null;
+  failure?: { message?: string | null; code?: string | null; platform?: string | null; at?: string | null } | null;
   platform_post_url?: string;
   published_at?: string;
   workspace_id?: string | null;
@@ -224,6 +252,8 @@ export interface Post {
 /** Filters shared by GET /posts and GET /posts/counts. */
 export interface ListPostsParams {
   status?: string;
+  group_id?: string;
+  release_id?: string;
   platform?: string;
   account_id?: string;
   workspace_id?: string;
@@ -266,6 +296,8 @@ export interface PostCountsResponse {
 function postFilterParams(params?: ListPostsParams): URLSearchParams {
   const searchParams = new URLSearchParams();
   if (params?.status) searchParams.set('status', params.status);
+  if (params?.group_id) searchParams.set('group_id', params.group_id);
+  if (params?.release_id) searchParams.set('release_id', params.release_id);
   if (params?.platform) searchParams.set('platform', params.platform);
   if (params?.account_id) searchParams.set('account_id', params.account_id);
   if (params?.workspace_id) searchParams.set('workspace_id', params.workspace_id);
@@ -635,6 +667,36 @@ export type SubscriptionSummary = {
   paused_at: string | null;
   pause_resumes_at: string | null;
   stripe_subscription_id: string | null;
+  /** Connected accounts for the workspace this caller is acting in. */
+  accounts?: {
+    workspace_id: string | null;
+    used: number;
+    limit: number;
+  } | null;
+  /** The plans above this user's, with real prices, limits and credits. */
+  upgrade_options?: SubscriptionUpgradeOption[];
+  /** What to do next for this user's tier and status. */
+  next_steps?: SubscriptionNextStep[];
+  /** The billing page: the way out where a plan change cannot be made from a tool. */
+  billing_url?: string;
+  /** Agency workspace owners only. Same body as GET /subscription/extra-accounts. */
+  extra_accounts?: ExtraAccountsStateResponse;
+};
+
+export type SubscriptionUpgradeOption = {
+  tier: SubscriptionTierName;
+  name: string;
+  monthly_price: number;
+  yearly_price: number;
+  max_accounts: number;
+  included_credits: number;
+};
+
+export type SubscriptionNextStep = {
+  id: string;
+  text: string;
+  tool?: string;
+  params?: Record<string, unknown>;
 };
 
 export type SubscriptionSummaryResponse = {
@@ -653,6 +715,25 @@ export type CreditsSummaryResponse = {
     resets_at: string | null;
     workspace: { role: string; shared_wallet: boolean };
   };
+};
+
+/** Mirrors AgentStatusResponse in lib/status/agent-status.ts (GET /api/v1/status). */
+export type PosterlyStatusResponse = {
+  state: 'operational' | 'degraded' | 'partial_outage' | 'major_outage' | 'unknown';
+  state_basis: string;
+  insufficient_data: boolean;
+  counted_4h: number;
+  as_of: string;
+  incidents: { platform: string; state: string; message: string }[];
+  platforms: {
+    platform: string;
+    state: 'operational' | 'degraded' | 'outage' | 'low_volume' | 'no_data';
+    success_rate_7d: number | null;
+    publishes_7d: number;
+    customer_side_failures_7d: number;
+  }[];
+  upcoming_scheduled_posts: number;
+  notes: string;
 };
 
 export type CancelSubscriptionPayload = {
@@ -681,6 +762,158 @@ export type DowngradeSubscriptionResponse = {
   success: true;
   tier: SubscriptionTierName;
 };
+
+export type UpgradeInterval = 'week' | 'month' | 'year';
+
+export type UpgradeQuote = {
+  kind: 'upgrade';
+  current_tier: SubscriptionTierName;
+  current_tier_name: string;
+  new_tier: SubscriptionTierName;
+  new_tier_name: string;
+  current_interval: UpgradeInterval;
+  interval: UpgradeInterval;
+  interval_changes: boolean;
+  trialing: boolean;
+  charge_today_cents: number;
+  charge_today: string;
+  currency: string;
+  current_recurring_cents: number | null;
+  new_recurring_cents: number;
+  new_recurring: string;
+  account_limit_before: number;
+  account_limit_after: number;
+  included_credits_before: number;
+  included_credits_after: number;
+};
+
+export type UpgradeQuoteResponse = {
+  dry_run: true;
+  quote: UpgradeQuote;
+};
+
+export type UpgradePaymentPending = {
+  hosted_invoice_url: string | null;
+  requested_tier: SubscriptionTierName | null;
+  amount_due_cents: number | null;
+  expires_at: string | null;
+};
+
+export type UpgradeAppliedResponse = {
+  applied: true;
+  status: 'applied';
+  previous_tier: SubscriptionTierName;
+  previous_tier_name: string;
+  tier: SubscriptionTierName;
+  tier_name: string;
+  interval: UpgradeInterval;
+  trialing: boolean;
+  charged_cents: number | null;
+  account_limit: number;
+  included_credits: number;
+};
+
+export type UpgradePaymentRequiredResponse = {
+  applied: false;
+  status: 'payment_required';
+  payment_required: true;
+  message: string;
+  hosted_invoice_url: string | null;
+  payment_pending: UpgradePaymentPending;
+  previous_tier: SubscriptionTierName;
+  previous_tier_name: string;
+  requested_tier: SubscriptionTierName;
+  requested_tier_name: string;
+  interval: UpgradeInterval;
+  account_limit_after_payment: number;
+  included_credits_after_payment: number;
+};
+
+export type UpgradeSubscriptionResponse = UpgradeAppliedResponse | UpgradePaymentRequiredResponse;
+
+export type ExtraAccountsPaymentPending = {
+  hosted_invoice_url: string | null;
+  requested_extra_accounts: number;
+  amount_due_cents: number | null;
+  expires_at: string | null;
+};
+
+export type ExtraAccountsStateResponse = {
+  eligible: boolean;
+  code: string | null;
+  reason: string | null;
+  trialing: boolean;
+  interval: 'month' | 'year' | null;
+  included_accounts: number;
+  admin_granted_accounts: number;
+  paid_extra_accounts: number;
+  account_limit: number;
+  accounts_in_use: number;
+  highest_accounts_in_use: number;
+  min_paid_extra_accounts: number;
+  min_purchase: number;
+  price_per_account_cents: number | null;
+  price_per_account: string | null;
+  recurring_cents: number | null;
+  payment_pending: ExtraAccountsPaymentPending | null;
+};
+
+export type ExtraAccountsQuote = {
+  kind: 'none' | 'increase' | 'decrease' | 'remove';
+  current_extra_accounts: number;
+  new_extra_accounts: number;
+  change: number;
+  included_accounts: number;
+  account_limit_after: number;
+  accounts_in_use: number;
+  interval: 'month' | 'year';
+  trialing: boolean;
+  price_per_account_cents: number;
+  current_recurring_cents: number;
+  new_recurring_cents: number;
+  new_recurring: string;
+  charge_today_cents: number;
+  charge_today: string;
+  currency: string;
+};
+
+export type ExtraAccountsQuoteResponse = {
+  dry_run: true;
+  quote: ExtraAccountsQuote;
+};
+
+export type ExtraAccountsAppliedResponse = {
+  applied: true;
+  status: 'applied' | 'unchanged';
+  kind: ExtraAccountsQuote['kind'];
+  previous_extra_accounts: number;
+  extra_accounts: number;
+  included_accounts: number;
+  account_limit: number;
+  accounts_in_use: number;
+  interval: 'month' | 'year';
+  price_per_account_cents: number;
+  recurring_cents: number;
+};
+
+export type ExtraAccountsPaymentRequiredResponse = {
+  applied: false;
+  status: 'payment_required';
+  payment_required: true;
+  message: string;
+  hosted_invoice_url: string | null;
+  payment_pending: ExtraAccountsPaymentPending;
+  kind: ExtraAccountsQuote['kind'];
+  previous_extra_accounts: number;
+  requested_extra_accounts: number;
+  included_accounts: number;
+  account_limit_after_payment: number;
+  interval: 'month' | 'year';
+  price_per_account_cents: number;
+  recurring_cents: number;
+};
+
+export type ExtraAccountsChangeResponse = ExtraAccountsAppliedResponse | ExtraAccountsPaymentRequiredResponse;
 
 export type AskSupportResponse = {
   success: boolean;
@@ -813,6 +1046,12 @@ export interface AccountAnalyticsResponse {
   range: { from: string; to: string };
   summary: AccountAnalyticsSummary;
   snapshots: AccountAnalyticsSnapshot[];
+  extras?: {
+    enabled: boolean;
+    demographics?: Array<Record<string, unknown>> | null;
+    sync_status?: Record<string, unknown> | null;
+    entity_snapshots?: Array<Record<string, unknown>> | null;
+  };
 }
 
 export interface PostAnalyticsRow {
@@ -853,6 +1092,8 @@ export interface PostAnalyticsResponse {
 
 export interface GoogleBusinessReview {
   name?: string;
+  /** Same resource name as `name`, the value reply and delete_reply accept. */
+  review_name?: string;
   reviewId?: string;
   reviewer?: { displayName?: string; profilePhotoUrl?: string };
   starRating: number;
@@ -932,6 +1173,8 @@ export interface InboxListParams {
   search?: string;
   limit?: number;
   offset?: number;
+  since?: string;
+  until?: string;
 }
 
 export interface InboxConversationsResponse {
@@ -1197,12 +1440,53 @@ export interface PublicSignupPayment {
   amount_display?: string | null;
   billing?: string;
   description?: string;
+  /** Free trial length in days, or null when Checkout charges today. */
+  trial_period_days?: number | null;
+  /** False when Checkout collects a card and charges nothing today. */
+  charged_today?: boolean;
   merchant_name?: string;
   merchant_url?: string;
   checkout_redirect_url?: string;
   pay_with?: string;
   agent_wallet?: PublicSignupPaymentAgentWallet;
   [key: string]: unknown;
+}
+
+/** True when this signup Checkout is the card-backed free trial (nothing due today). */
+export function signupCheckoutIsTrial(payment: PublicSignupPayment | null | undefined): boolean {
+  if (!payment) return false;
+  if (payment.charged_today === true) return false;
+  if (payment.charged_today === false) return true;
+  return typeof payment.trial_period_days === 'number' && payment.trial_period_days >= 1;
+}
+
+/**
+ * One line for the Checkout charge. Trials have amount null, so this does not
+ * invent an amount due. A session that charges today keeps the amount the
+ * server returned.
+ */
+export function signupCheckoutChargeLine(payment: PublicSignupPayment | null | undefined): string {
+  if (!payment) return '';
+  if (signupCheckoutIsTrial(payment)) {
+    const trialDays =
+      typeof payment.trial_period_days === 'number' &&
+      Number.isFinite(payment.trial_period_days) &&
+      payment.trial_period_days >= 1
+        ? Math.floor(payment.trial_period_days)
+        : null;
+    const described = payment.description ? ` ${payment.description}.` : '';
+    const card = payment.description?.toLowerCase().includes('card required') ? '' : ' A card is required.';
+    const chargeDay = trialDays ? trialDays + 1 : null;
+    const when =
+      chargeDay && !payment.description?.includes(`day ${chargeDay}`)
+        ? ` The card is charged on day ${chargeDay} unless the paid plan starts sooner.`
+        : '';
+    return `Nothing due today.${described}${card}${when}`;
+  }
+  if (payment.amount_display) {
+    return `Amount due: ${payment.amount_display} ${String(payment.currency || 'usd').toUpperCase()} to ${payment.merchant_name || 'posterly'} (${payment.billing || 'subscription'})`;
+  }
+  return '';
 }
 
 export interface PublicSignupSession {
@@ -1310,6 +1594,28 @@ export interface XPostingQuotaResponse {
   plans?: Array<Record<string, unknown>>;
 }
 
+export type SignedUploadBatchSlot =
+  | {
+      index: number;
+      filename: string;
+      ok: true;
+      upload_url: string;
+      token: string;
+      path: string;
+      public_url: string;
+      expires_at: string;
+      max_size: number;
+      headers?: Record<string, string>;
+      provider?: string;
+      content_type_pinned?: boolean;
+    }
+  | { index: number; filename: string; ok: false; error: string; code: string };
+
+export interface SignedUploadBatchResponse {
+  slots: SignedUploadBatchSlot[];
+  summary: { requested: number; ok: number; failed: number };
+}
+
 export class PosterlyClient {
   private baseUrl: string;
   private apiKey: string;
@@ -1400,7 +1706,7 @@ export class PosterlyClient {
   private requireApiKey(): void {
     if (!this.apiKey) {
       throw new Error(
-        'posterly access is not installed yet. Use start_signup to begin paid setup, or set POSTERLY_API_KEY after signup.'
+        'posterly access is not installed yet. Use start_signup to start the card-backed free trial, or set POSTERLY_API_KEY after signup.'
       );
     }
   }
@@ -1489,6 +1795,10 @@ export class PosterlyClient {
     return this.request<Whoami>('GET', '/whoami');
   }
 
+  async listApiKeys(): Promise<{ api_keys: Array<{ id: string; name: string; key_prefix: string; scopes: string[]; created_at: string; last_used_at: string | null }> }> {
+    return this.request('GET', '/api-keys');
+  }
+
   async createApiKey(data: CreateApiKeyPayload): Promise<CreateApiKeyResponse> {
     return this.request('POST', '/api-keys', data);
   }
@@ -1568,6 +1878,10 @@ export class PosterlyClient {
     return this.request('GET', '/credits');
   }
 
+  async getStatus(): Promise<PosterlyStatusResponse> {
+    return this.request('GET', '/status');
+  }
+
   async cancelSubscription(data: CancelSubscriptionPayload): Promise<CancelSubscriptionResponse> {
     return this.request('POST', '/subscription/cancel', data);
   }
@@ -1584,9 +1898,45 @@ export class PosterlyClient {
     return this.request('POST', '/subscription/downgrade', data);
   }
 
-  async listAccounts(params?: { workspace_id?: string }): Promise<Account[]> {
+  /** Exact price of a plan upgrade; charges nothing. */
+  async quoteUpgrade(data: { tier: SubscriptionTierName; interval?: 'month' | 'year'; workspace_id?: string }): Promise<UpgradeQuoteResponse> {
+    return this.request('POST', '/subscription/upgrade', { ...data, dry_run: true });
+  }
+
+  /** Applies the upgrade and charges the saved card. Only call after a quote was shown and approved. */
+  async upgradeSubscription(data: {
+    tier: SubscriptionTierName;
+    interval?: 'month' | 'year';
+    request_id?: string;
+    workspace_id?: string;
+    /** What the quote was based on; the API answers 409 quote_stale when the live values differ. */
+    expected_current_tier?: SubscriptionTierName;
+    expected_interval?: UpgradeInterval;
+  }): Promise<UpgradeSubscriptionResponse> {
+    return this.request('POST', '/subscription/upgrade', data);
+  }
+
+  /** Exact price of a change; charges nothing. */
+  async quoteExtraAccounts(data: { extra_accounts: number; workspace_id?: string }): Promise<ExtraAccountsQuoteResponse> {
+    return this.request('POST', '/subscription/extra-accounts', { ...data, dry_run: true });
+  }
+
+  /** Applies the change and charges the saved card. Only call after a quote was shown and approved. */
+  async setExtraAccounts(data: {
+    extra_accounts: number;
+    request_id?: string;
+    workspace_id?: string;
+    /** What the quote was based on; the API answers 409 quote_stale when the live values differ. */
+    expected_current_extra_accounts?: number;
+    expected_interval?: 'month' | 'year';
+  }): Promise<ExtraAccountsChangeResponse> {
+    return this.request('POST', '/subscription/extra-accounts', data);
+  }
+
+  async listAccounts(params?: { workspace_id?: string; connection?: 'ok' | 'needs_reconnect' }): Promise<Account[]> {
     const searchParams = new URLSearchParams();
     if (params?.workspace_id) searchParams.set('workspace_id', params.workspace_id);
+    if (params?.connection) searchParams.set('connection', params.connection);
     const qs = searchParams.toString();
     const data = await this.request<{ accounts: Account[] }>('GET', `/accounts${qs ? `?${qs}` : ''}`);
     return data.accounts;
@@ -1682,6 +2032,18 @@ export class PosterlyClient {
     return this.request('GET', `/brands/${encodeURIComponent(id)}`);
   }
 
+  async createBrand(data: { workspace_id?: string; name: string; timezone?: string; website_url?: string | null; confirm: true }): Promise<{ brand: Record<string, unknown> }> {
+    return this.request('POST', '/brands', data);
+  }
+
+  async updateBrand(id: string, data: { name?: string; timezone?: string; website_url?: string | null; confirm: true }): Promise<{ brand: Record<string, unknown> }> {
+    return this.request('PATCH', `/brands/${encodeURIComponent(id)}`, data);
+  }
+
+  async archiveBrand(id: string, data: { confirm?: boolean }): Promise<Record<string, unknown>> {
+    return this.request('POST', `/brands/${encodeURIComponent(id)}/archive`, data);
+  }
+
   async listBrandAccounts(id: string): Promise<Account[]> {
     const data = await this.request<{ accounts: Account[] }>('GET', `/brands/${encodeURIComponent(id)}/accounts`);
     return data.accounts;
@@ -1731,6 +2093,18 @@ export class PosterlyClient {
 
   async dismissSuggestion(id: string): Promise<DismissSuggestionResponse> {
     return this.request('POST', `/suggestions/${encodeURIComponent(id)}/dismiss`, {});
+  }
+
+  async acceptSuggestion(id: string): Promise<AcceptSuggestionResponse> {
+    return this.request('POST', `/suggestions/${encodeURIComponent(id)}/accept`, {});
+  }
+
+  async getMediaAsset(id: string): Promise<{ media: { id: string; filename: string; mime: string | null; bytes: number | null; created_at: string } }> {
+    return this.request('GET', `/media/${encodeURIComponent(id)}`);
+  }
+
+  async deleteMediaAsset(id: string): Promise<{ ok: boolean; deleted: boolean; id: string; filename: string }> {
+    return this.request('DELETE', `/media/${encodeURIComponent(id)}`);
   }
 
   async listPosts(params?: ListPostsParams & {
@@ -1797,6 +2171,8 @@ export class PosterlyClient {
       media_url?: string;
       media_urls?: string[];
       post_type?: string;
+      account_id?: string;
+      thread_posts?: string[];
       metadata?: Record<string, unknown>;
       settings?: PlatformPostSettings;
       reel_cover_url?: string | null;
@@ -1979,11 +2355,13 @@ export class PosterlyClient {
     account_id: number;
     from?: string;
     to?: string;
+    include_extras?: boolean;
   }): Promise<AccountAnalyticsResponse> {
     const searchParams = new URLSearchParams();
     searchParams.set('account_id', String(params.account_id));
     if (params.from) searchParams.set('from', params.from);
     if (params.to) searchParams.set('to', params.to);
+    if (params.include_extras) searchParams.set('include', 'extras');
     return this.request('GET', `/analytics/accounts?${searchParams.toString()}`);
   }
 
@@ -2081,6 +2459,43 @@ export class PosterlyClient {
     return this.request('DELETE', '/google-business/reviews/reply', data);
   }
 
+  async getGoogleBusinessServiceArea(params: {
+    workspace_id?: string;
+    account_id?: number;
+    location_id?: string;
+  }): Promise<Record<string, any>> {
+    const searchParams = new URLSearchParams();
+    if (params.workspace_id) searchParams.set('workspace_id', params.workspace_id);
+    if (params.account_id) searchParams.set('account_id', String(params.account_id));
+    if (params.location_id) searchParams.set('location_id', params.location_id);
+    const qs = searchParams.toString();
+    return this.request('GET', `/google-business/service-area${qs ? `?${qs}` : ''}`);
+  }
+
+  async searchGoogleBusinessServiceAreaPlaces(params: {
+    workspace_id?: string;
+    q: string;
+    region_code?: string;
+  }): Promise<{ query: string; places: Array<{ place_id: string; place_name: string }> }> {
+    const searchParams = new URLSearchParams();
+    if (params.workspace_id) searchParams.set('workspace_id', params.workspace_id);
+    searchParams.set('q', params.q);
+    if (params.region_code) searchParams.set('region_code', params.region_code);
+    return this.request('GET', `/google-business/service-area/places?${searchParams.toString()}`);
+  }
+
+  async updateGoogleBusinessServiceArea(data: {
+    workspace_id?: string;
+    account_id?: number;
+    location_id?: string;
+    business_type: string;
+    region_code?: string | null;
+    places: Array<{ place_id: string; place_name: string }>;
+    clear_storefront_address?: boolean;
+  }): Promise<Record<string, any>> {
+    return this.request('PATCH', '/google-business/service-area', data);
+  }
+
   async listGoogleBusinessMedia(params?: {
     workspace_id?: string;
     account_id?: number;
@@ -2112,6 +2527,27 @@ export class PosterlyClient {
     media_name: string;
   }): Promise<Record<string, any>> {
     return this.request('DELETE', '/google-business/media', data);
+  }
+
+  async listGoogleBusinessLocation(params?: {
+    workspace_id?: string;
+    account_id?: number;
+    location_id?: string;
+  }): Promise<Record<string, any>> {
+    const searchParams = new URLSearchParams();
+    if (params?.workspace_id) searchParams.set('workspace_id', params.workspace_id);
+    if (params?.account_id) searchParams.set('account_id', String(params.account_id));
+    if (params?.location_id) searchParams.set('location_id', params.location_id);
+    const qs = searchParams.toString();
+    return this.request('GET', `/google-business/location${qs ? `?${qs}` : ''}`);
+  }
+
+  async updateGoogleBusinessHours(data: Record<string, any>): Promise<Record<string, any>> {
+    return this.request('PATCH', '/google-business/location', { ...data, attributes: undefined, regular_hours: data.regular_hours });
+  }
+
+  async updateGoogleBusinessAttributes(data: Record<string, any>): Promise<Record<string, any>> {
+    return this.request('PATCH', '/google-business/location', { ...data, regular_hours: undefined, attributes: data.attributes });
   }
 
   async listActivity(params?: {
@@ -2153,6 +2589,14 @@ export class PosterlyClient {
     if (params?.workspace_id) searchParams.set('workspace_id', params.workspace_id);
     const qs = searchParams.toString();
     return this.request('GET', `/webhooks${qs ? `?${qs}` : ''}`);
+  }
+
+  async listWebhookDeliveries(webhookId: string, params?: { limit?: number; offset?: number }): Promise<Record<string, any>> {
+    const searchParams = new URLSearchParams();
+    if (params?.limit) searchParams.set('limit', String(params.limit));
+    if (params?.offset != null) searchParams.set('offset', String(params.offset));
+    const qs = searchParams.toString();
+    return this.request('GET', `/webhooks/${encodeURIComponent(webhookId)}/deliveries${qs ? `?${qs}` : ''}`);
   }
 
   async createWebhook(data: {
@@ -2216,6 +2660,21 @@ export class PosterlyClient {
     return this.request('POST', '/platforms/trigger', data);
   }
 
+  async quoteXPostingAddon(data: { plan_code?: string; workspace_id?: string }): Promise<{ dry_run: true; charged: false; quote: { mode?: string; plan_code?: string | null; plan_name?: string | null; monthly_posts?: number | null; price_usd?: number | null; current_addon_status?: string; current_plan_code?: string | null; effect?: string } }> {
+    return this.request('POST', '/subscription/x-posting-addon', { ...data, dry_run: true });
+  }
+
+  async buyXPostingAddon(data: {
+    confirm: true;
+    plan_code?: string;
+    workspace_id?: string;
+    expected_addon_status: string;
+    expected_plan_code: string | null;
+    expected_price_usd: number | null;
+  }): Promise<{ charged: false; mode?: string; url?: string; effect?: string }> {
+    return this.request('POST', '/subscription/x-posting-addon', data);
+  }
+
   async getXPostingQuota(params?: { workspace_id?: string }): Promise<XPostingQuotaResponse> {
     const searchParams = new URLSearchParams();
     if (params?.workspace_id) searchParams.set('workspace_id', params.workspace_id);
@@ -2228,18 +2687,33 @@ export class PosterlyClient {
     contentType: string,
     size: number,
     workspaceId?: string,
+    pinContentType?: boolean,
   ): Promise<{
     upload_url: string;
     token: string;
     path: string;
     public_url: string;
     headers?: Record<string, string>;
+    content_type_pinned?: boolean;
   }> {
     return this.request('POST', '/media/signed-upload', {
       filename,
       content_type: contentType,
       size,
       ...(workspaceId ? { workspace_id: workspaceId } : {}),
+      ...(pinContentType ? { pin_content_type: true } : {}),
+    });
+  }
+
+  async getSignedUploadUrls(
+    files: Array<{ filename: string; content_type: string; size: number }>,
+    workspaceId?: string,
+    pinContentType?: boolean,
+  ): Promise<SignedUploadBatchResponse> {
+    return this.request('POST', '/media/signed-upload', {
+      files,
+      ...(workspaceId ? { workspace_id: workspaceId } : {}),
+      ...(pinContentType ? { pin_content_type: true } : {}),
     });
   }
 
@@ -2325,12 +2799,20 @@ export class PosterlyClient {
         input.workspaceId,
       );
 
+      // Send the returned headers verbatim. The storage URL can be signed for
+      // that exact Content-Type (pinned uploads answer 403 otherwise), and
+      // header names are case-insensitive: adding our own 'Content-Type' next
+      // to the returned 'content-type' would send both, joined as
+      // "video/mp4, video/mp4". Only fall back to our type if none came back.
+      const returnedHeaders = signed.headers || {};
+      const hasReturnedContentType = Object.keys(returnedHeaders).some(
+        (name) => name.toLowerCase() === 'content-type',
+      );
       const uploadRes = await fetch(signed.upload_url, {
         method: 'PUT',
-        headers: {
-          'Content-Type': contentType,
-          ...(signed.headers || {}),
-        },
+        headers: hasReturnedContentType
+          ? returnedHeaders
+          : { 'Content-Type': contentType, ...returnedHeaders },
         body: new Uint8Array(fileBuffer),
       });
 
@@ -2377,6 +2859,8 @@ export class PosterlyClient {
     if (params?.search) searchParams.set('search', params.search);
     if (params?.limit) searchParams.set('limit', String(params.limit));
     if (params?.offset != null) searchParams.set('offset', String(params.offset));
+    if (params?.since) searchParams.set('since', params.since);
+    if (params?.until) searchParams.set('until', params.until);
   }
 
   async listConversations(params?: InboxListParams): Promise<InboxConversationsResponse> {
@@ -2603,6 +3087,11 @@ function formatProbeError(data: any, fallback: string, statusText: string): stri
 
 function formatApiError(res: Response, data: any): string {
   const message = data?.error || data?.message || `API error: ${res.status}`;
+  if (res.status === 403 && (data?.code === 'trial_feature_locked' || data?.code === 'trial_post_cap_reached')) {
+    // A free-trial limit: the message already carries the upgrade link. Say
+    // plainly that retrying cannot help, so an agent does not loop on it.
+    return `${message} Retrying will not help until the paid plan is started.`;
+  }
   if (res.status !== 429) {
     return message;
   }

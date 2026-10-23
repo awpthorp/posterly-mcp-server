@@ -1,0 +1,18 @@
+@@ -70,6 +70,8 @@
+ import { manageGoogleBusinessReviewTool } from './tools/manage-google-business-review.js';
+ import { listGoogleBusinessMediaTool } from './tools/list-google-business-media.js';
+ import { manageGoogleBusinessMediaTool } from './tools/manage-google-business-media.js';
++import { listGoogleBusinessLocationsTool } from './tools/list-google-business-locations.js';
++import { manageGoogleBusinessLocationTool } from './tools/manage-google-business-location.js';
+ import { listConversationsTool } from './tools/list-conversations.js';
+ import { manageConversationTool } from './tools/manage-conversation.js';
+ import { listCommentsTool } from './tools/list-comments.js';
+@@ -158,6 +160,8 @@
+   manageGoogleBusinessReviewTool,
+   listGoogleBusinessMediaTool,
+   manageGoogleBusinessMediaTool,
++  listGoogleBusinessLocationsTool,
++  manageGoogleBusinessLocationTool,
+   listConversationsTool,
+   manageConversationTool,
+   listCommentsTool,

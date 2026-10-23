@@ -6,7 +6,7 @@ import type {
   PostAnalyticsRow,
   PosterlyClient,
 } from '../lib/api-client.js';
-import { formatDateTime, mdEmpty, mdKeyValue, mdSection, mdTitle, truncateText } from '../lib/format.js';
+import { formatDateTime, formatIsoTimestamp, mdEmpty, mdKeyValue, mdSection, mdTitle, truncateText } from '../lib/format.js';
 import { validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 const presentationSchema = z.enum(['compact', 'table', 'json']).optional();
@@ -24,12 +24,13 @@ type ListAnalyticsInput = {
   post_id?: number;
   checkpoint?: Checkpoint;
   presentation?: AnalyticsPresentation;
+  include_extras?: boolean;
 };
 
 export const listAnalyticsTool = {
   name: 'list_analytics',
   description:
-    'Analytics for connected social accounts (Instagram, X, Facebook, LinkedIn, Google Business Profile, Pinterest, YouTube, and Threads). view=accounts (account_id): daily snapshots and a period summary with platform-native display_metrics labels. Google Business Profile account analytics includes Calls, Website clicks, and Directions along with Profile Views, Search Views, Maps Views, Customer Actions, and Posts. view=posts (account_id): per-post likes, comments/replies, reach, impressions/views, saves, shares, reposts, quotes, plays, clicks, and watch time, most recent first, with limit/offset. view=insights: per-post feedback insights with a performance tier (great/good/mixed/poor), diagnosis, next action, and baseline, filtered by account_id, post_id, or checkpoint (1h, 6h, 24h, 72h, 7d); read-only, Pro plan or higher. presentation (accounts and posts): compact for Telegram/mobile, table for Markdown clients, json for custom chart/card renderers.',
+    'Analytics for connected social accounts (Instagram, X, Facebook, LinkedIn, Google Business Profile, Pinterest, YouTube, and Threads). view=accounts (account_id): daily snapshots and a period summary with platform-native display_metrics labels. Google Business Profile account analytics includes Calls, Website clicks, and Directions along with Profile Views, Search Views, Maps Views, Customer Actions, and Posts. view=posts (account_id): per-post likes, comments/replies, reach, impressions/views, saves, shares, reposts, quotes, plays, clicks, and watch time, most recent first, with limit/offset. Google Business has no per-post rows; its totals are on view=accounts. view=insights: per-post feedback insights with a performance tier (great/good/mixed/poor), diagnosis, next action, and baseline, filtered by account_id, post_id, or checkpoint (1h, 6h, 24h, 72h, 7d); read-only, Pro plan or higher. presentation (accounts and posts): compact for Telegram/mobile, table for Markdown clients, json for custom chart/card renderers. include_extras on accounts asks for saved audience breakdowns, the last analytics sync, and entity snapshots. Those stay off until snapshot extras are switched on, and this does not start a new sync.',
   inputSchema: z.object({
     view: z.enum(['accounts', 'posts', 'insights']).describe('accounts, posts, or insights.'),
     account_id: z
@@ -56,7 +57,8 @@ export const listAnalyticsTool = {
       .enum(['1h', '6h', '24h', '72h', '7d'])
       .optional()
       .describe('insights: filter to one checkpoint after publish.'),
-    presentation: presentationSchema.describe('accounts and posts: compact bullets, Markdown table, or raw JSON for client-side chart/card rendering.'),
+    presentation: presentationSchema.describe('accounts and posts: compact, table, or json.'),
+    include_extras: z.boolean().optional().describe('accounts: also return saved audience breakdowns, sync status, and entity snapshots when that read is switched on.'),
   }),
   /** The old tools' exact input schemas, for alias calls (see alias-transport.ts). */
   legacySchemas: {
@@ -85,7 +87,7 @@ export const listAnalyticsTool = {
   async execute(client: PosterlyClient, input: ListAnalyticsInput, ctx: ToolContext) {
     const { mode, args } = validateArgs(ctx, 'list_analytics', input);
     if (mode === 'accounts') {
-      const result = await client.getAccountAnalytics(args as { account_id: number; from?: string; to?: string });
+      const result = await client.getAccountAnalytics(args as { account_id: number; from?: string; to?: string; include_extras?: boolean });
       return formatAccountAnalytics(result, args.presentation || 'compact');
     }
     if (mode === 'posts') {
@@ -114,7 +116,7 @@ async function postInsights(
     return mdSection(
       heading,
       mdKeyValue([
-        ['Post ID', insight.post_id],
+        ['Post ID', insight.post_id != null ? String(insight.post_id) : undefined],
         ['Platform', insight.platform],
         ['Account', insight.username ? `@${insight.username}` : String(insight.social_account_id)],
         ['Diagnosis', truncateText(insight.diagnosis, 220)],
@@ -131,9 +133,10 @@ async function postInsights(
 }
 
 function formatAccountAnalytics(result: AccountAnalyticsResponse, presentation: Exclude<AnalyticsPresentation, undefined>): string {
-  const { account, range, summary, snapshots } = result;
+  const { account, range, summary, snapshots, extras } = result;
   const rows = accountMetricRows(summary, account.platform);
   const insights = analyticsInsights(summary, account.platform);
+  const saved = formatAccountExtras(extras);
 
   if (presentation === 'json') {
     return JSON.stringify({
@@ -145,6 +148,7 @@ function formatAccountAnalytics(result: AccountAnalyticsResponse, presentation: 
       insights,
       summary,
       snapshots,
+      ...(extras ? { extras } : {}),
     }, null, 2);
   }
 
@@ -164,6 +168,7 @@ function formatAccountAnalytics(result: AccountAnalyticsResponse, presentation: 
       '',
       '**Quick read**',
       insights.map((insight) => `- ${insight}`).join('\n'),
+      ...(saved ? [saved] : []),
     ].join('\n');
   }
 
@@ -180,7 +185,20 @@ function formatAccountAnalytics(result: AccountAnalyticsResponse, presentation: 
     '',
     '**Quick read**',
     insights.map((insight) => `- ${insight}`).join('\n'),
+    ...(saved ? [saved] : []),
   ].join('\n');
+}
+
+function formatAccountExtras(extras: AccountAnalyticsResponse['extras']): string {
+  if (!extras) return '';
+  if (extras.enabled !== true) return '\n**Saved detail**\nSaved audience breakdowns are switched off.';
+  const days = Array.isArray(extras.demographics) ? extras.demographics.length : 0;
+  const entities = Array.isArray(extras.entity_snapshots) ? extras.entity_snapshots.length : 0;
+  const sync = extras.sync_status;
+  const syncLine = sync
+    ? `Last sync ${sync.last_synced_at || 'unknown'} (${sync.status || 'unknown'}), ${sync.posts_synced ?? 'n/a'} posts.`
+    : 'No sync status saved.';
+  return `\n**Saved detail**\n- Audience days: ${days}\n- ${syncLine}\n- Entity snapshots: ${entities}`;
 }
 
 function accountMetricRows(summary: AccountAnalyticsSummary, platform: string): MetricRow[] {
@@ -274,7 +292,12 @@ function formatPostAnalytics(result: PostAnalyticsResponse, presentation: Exclud
   const { account, range, posts, total } = result;
 
   if (posts.length === 0) {
-    return `No analytics found for ${accountLabel(account.username)} (${account.platform}) between ${range.from} and ${range.to}.`;
+    const who = `${accountLabel(account.username)} (${account.platform})`;
+    const window = `between ${range.from} and ${range.to}`;
+    if (account.platform === 'google_business') {
+      return `Google Business analytics cover the location (profile views, searches, and customer actions), not each post. No per-post rows were found for ${who} ${window}. Ask for the account view to see those totals.`;
+    }
+    return `No analytics found for ${who} ${window}.`;
   }
 
   const totals = posts.reduce((acc, post) => {
@@ -437,8 +460,7 @@ function postExtras(platform: string, post: PostAnalyticsRow): string {
 
 function dateTime(value: string | null): string {
   if (!value) return 'n/a';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+  return formatIsoTimestamp(value);
 }
 
 function compact(value: string | null, maxLength: number): string {

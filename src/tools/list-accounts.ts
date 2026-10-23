@@ -3,6 +3,7 @@ import type { ConnectSession, PosterlyClient } from '../lib/api-client.js';
 import {
   DASHBOARD_CONNECT_URL,
   code,
+  connectionHealthLabel,
   formatConnectedAccounts,
   formatDateTime,
   formatLocalDateTime,
@@ -22,6 +23,7 @@ type ListAccountsInput = {
   view?: 'accounts' | 'learned_voice' | 'performance_profile' | 'connect_session';
   workspace_id?: string;
   account_id?: string | number;
+  connection?: 'ok' | 'needs_reconnect';
   session_id?: string;
   debug?: boolean;
 };
@@ -29,7 +31,7 @@ type ListAccountsInput = {
 export const listAccountsTool = {
   name: 'list_accounts',
   description:
-    "Connected social accounts and what posterly has learned about them. view=accounts (default): connected accounts, optionally one workspace_id or one account_id; Instagram rows identify direct-login versus Meta-linked connections and whether native media tags/collaborators are available, so check this before Instagram user_tags or collaborators. view=learned_voice (account_id): the voice learned from the account's real published captions (summary, traits, style guidelines, habits); read-only, never overwrites the saved brand profile. view=performance_profile (account_id): 90-day coaching stats, engagement-rate trend, and summary (Pro plan or higher; platforms without per-post analytics never get one). view=connect_session (session_id): poll a session from create_connect_session and keep the user updated in plain language; stop when status is connected, failed, cancelled, or expired.",
+    "Connected social accounts and what posterly has learned about them. view=accounts (default): connected accounts, optionally one workspace_id or one account_id. Each row has connection_status ok or needs_reconnect (reason and date, never a token). Pass connection needs_reconnect to list only accounts that need a reconnect. Instagram rows identify direct-login versus Meta-linked connections and whether native media tags/collaborators are available, so check this before Instagram user_tags or collaborators. view=learned_voice (account_id): the voice learned from the account's real published captions (summary, traits, style guidelines, habits); read-only, never overwrites the saved brand profile. view=performance_profile (account_id): 90-day coaching stats, engagement-rate trend, and summary (Pro plan or higher; platforms without per-post analytics never get one). view=connect_session (session_id): poll a session from create_connect_session and keep the user updated in plain language; stop when status is connected, failed, cancelled, or expired.",
   inputSchema: z.object({
     view: z
       .enum(['accounts', 'learned_voice', 'performance_profile', 'connect_session'])
@@ -43,6 +45,10 @@ export const listAccountsTool = {
       .union([z.string(), z.number()])
       .optional()
       .describe('Social account ID from list_accounts. Required for learned_voice and performance_profile; with view=accounts it returns just that account.'),
+    connection: z
+      .enum(['ok', 'needs_reconnect'])
+      .optional()
+      .describe('view=accounts: ok, or needs_reconnect to list only accounts that need a reconnect.'),
     session_id: z.string().optional().describe('view=connect_session: connect session ID returned by create_connect_session.'),
     debug: z
       .boolean()
@@ -69,7 +75,7 @@ export const listAccountsTool = {
 };
 
 async function accountsList(client: PosterlyClient, input: ListAccountsInput): Promise<string> {
-  const listed = await client.listAccounts({ workspace_id: input.workspace_id });
+  const listed = await client.listAccounts({ workspace_id: input.workspace_id, connection: input.connection });
   // There is no GET /accounts/:id, so account_id filters the list here.
   const accounts = input.account_id !== undefined
     ? listed.filter((account) => String(account.id) === String(input.account_id))
@@ -86,18 +92,33 @@ async function accountsList(client: PosterlyClient, input: ListAccountsInput): P
   }
 
   const hasInstagram = accounts.some((account) => account.platform === 'instagram');
+  // Only when the API sent them, so older fixtures without these fields stay unchanged.
+  const hasHealth = accounts.some((account) => connectionHealthLabel(account));
+  const showType = accounts.some((account) => account.account_type);
+  const showLocation = accounts.some((account) => account.location_id);
+  const headers = [
+    'Platform',
+    'Account',
+    'Account ID',
+    ...(showType ? ['Type'] : []),
+    'Workspace',
+    ...(showLocation ? ['Location ID'] : []),
+    ...(hasHealth ? ['Health'] : []),
+    ...(hasInstagram ? ['Connection', 'Native tags', 'Collaborators'] : []),
+  ];
 
   return [
     mdTitle(`Connected accounts (${accounts.length})`),
     mdTable(
-      hasInstagram
-        ? ['Platform', 'Account', 'Account ID', 'Workspace', 'Connection', 'Native tags', 'Collaborators']
-        : ['Platform', 'Account', 'Account ID', 'Workspace'],
+      headers,
       accounts.map((account) => [
         account.platform,
         `@${account.username}`,
         code(account.id),
+        ...(showType ? [account.account_type || 'n/a'] : []),
         account.workspace_id ? code(account.workspace_id) : 'default',
+        ...(showLocation ? [account.location_id ? code(String(account.location_id)) : 'n/a'] : []),
+        ...(hasHealth ? [connectionHealthLabel(account) || 'n/a'] : []),
         ...(hasInstagram
           ? account.platform === 'instagram'
             ? [

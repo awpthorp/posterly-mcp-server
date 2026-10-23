@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
-import { code, formatDateTime, mdKeyValue, mdQuote, mdSection, mdTitle, statusLabel } from '../lib/format.js';
+import { code, dashboardUrlForPost, formatDateTime, groupReleaseIds, mdKeyValue, mdQuote, mdSection, mdTitle, platformPostIdText, platformText, postFailureText, statusLabel } from '../lib/format.js';
 import { validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 const mediaAccessibilitySchema = z.array(z.object({
@@ -155,6 +155,8 @@ type EditInput = {
   media_url?: string;
   media_urls?: string[];
   post_type?: string;
+  account_id?: string;
+  thread_posts?: string[];
   instagram_settings?: z.infer<typeof instagramSettingsSchema>;
   platform_settings?: z.infer<typeof platformSettingsSchema>;
   confirm: true;
@@ -172,7 +174,7 @@ type UpdatePostInput = EditInput & {
 export const updatePostTool = {
   name: 'update_post',
   description:
-    'Change a scheduled or draft post. DESTRUCTIVE WRITE. Edit (default): caption, media, schedule, post_type, or settings; overwrites the existing post; cannot edit published or currently publishing posts; if a client has already approved the post, a caption edit reopens caption approval, a media or thumbnail edit reopens asset approval, and a reschedule, account change or settings change reopens both. status (scheduled, paused, or draft, with scheduled_at when scheduling a draft): pause, resume, or move back to draft; send it on its own. release_id (with optional group_id): set or repair external release/group IDs; send it on its own. approval_action (request, approve, request_changes, or reject): change client approval. Only a workspace owner or admin may do this. The actor is the API key user, never a brand guest. request emails the brand reviewers. approve, request_changes, and reject are team-side decisions. request_changes needs approval_note. Optional approval_axis is asset or caption; omit it for both. Send approval_action on its own.\n\n' +
+    'Change a scheduled or draft post. DESTRUCTIVE WRITE. Edit (default): caption, media, schedule, post_type, settings, account_id, or thread_posts; overwrites the existing post; cannot edit published or currently publishing posts. account_id moves the post to another account you can use in the same workspace and on the same brand, and the platform follows that account. thread_posts replaces an X or Threads reply chain with at least two non-empty parts, and the first part becomes the caption. If a client has already approved the post, a caption edit reopens caption approval, a media or thumbnail edit reopens asset approval, and a reschedule, account change, thread edit, or settings change reopens both. status (scheduled, paused, or draft, with scheduled_at when scheduling a draft): pause, resume, or move back to draft; send it on its own. release_id (with optional group_id): set or repair external release/group IDs; send it on its own. approval_action (request, approve, request_changes, or reject): change client approval. Only a workspace owner or admin may do this. The actor is the API key user, never a brand guest. request emails the brand reviewers. approve, request_changes, and reject are team-side decisions. request_changes needs approval_note. Optional approval_axis is asset or caption; omit it for both. Send approval_action on its own.\n\n' +
     'REQUIRED BEFORE CALLING: Show the user a side-by-side of the CURRENT post (caption, scheduled time, media, status) and the PROPOSED change, and get explicit confirmation ("yes update it", "apply those changes") before calling. Do not auto-edit posts based on a general instruction - each change needs its own confirmation.',
   inputSchema: z.object({
     post_id: z.number().describe('The post ID to update'),
@@ -181,12 +183,21 @@ export const updatePostTool = {
       .string()
       .optional()
       .describe('New scheduled time (ISO 8601, e.g. 2026-03-10T09:00:00Z)'),
-    media_url: z.string().optional().describe('New media URL. Posterly storage URLs are used as-is; third-party HTTP(S) URLs are copied into posterly storage before the post is saved. Short-lived signed URLs must still be live when this tool runs.'),
-    media_urls: z.array(z.string()).optional().describe('New media URLs for carousel. Posterly storage URLs are used as-is; third-party HTTP(S) URLs are copied into posterly storage before the post is saved.'),
+    media_url: z.string().optional().describe('New media URL. Posterly storage URLs are used as-is; third-party URLs are copied into posterly storage first. Short-lived signed URLs must still be live when this tool runs.'),
+    media_urls: z.array(z.string()).optional().describe('New media URLs for carousel, handled like media_url.'),
     post_type: z
       .string()
       .optional()
       .describe('New post type: text, image, video, carousel, reel, story, story_series, document, photo, or cover_photo'),
+    account_id: z
+      .string()
+      .optional()
+      .describe('Move this unpublished post to another account you can use in the same workspace. The account must belong to the post brand. The platform follows the new account.'),
+    thread_posts: z
+      .array(z.string())
+      .min(2)
+      .optional()
+      .describe('Replace an X or Threads reply chain. At least 2 non-empty parts. The first part becomes the caption.'),
     // Reel cover controls are also accepted top-level, matching the hosted
     // endpoint. An agent reading the hosted schema will reach for these names,
     // and scripts/check-mcp-schema-parity.ts enforces that both surfaces agree.
@@ -213,7 +224,7 @@ export const updatePostTool = {
     approval_action: z
       .enum(['request', 'approve', 'request_changes', 'reject'])
       .optional()
-      .describe('Change client approval instead of editing the post. Owner or admin only. The actor is the API key user, never a brand guest. Send on its own.'),
+      .describe('Change client approval instead of editing the post. Send on its own.'),
     approval_axis: z
       .enum(['asset', 'caption'])
       .optional()
@@ -271,13 +282,25 @@ async function editPost(client: PosterlyClient, input: EditInput): Promise<strin
   };
   const result = await client.updatePost(post_id, payload);
   const p = result.post as Record<string, any>;
+  const platform = platformText(p.platform);
+  const accountId = p.social_account_id ?? p.account_id;
+  const failure = postFailureText(p);
+  const platformPostId = platformPostIdText(p);
+  const groups = groupReleaseIds(p);
 
   return [
     mdTitle(`✅ Post ${code(p.id)} updated`),
     mdKeyValue([
       ['Status', statusLabel(p.status)],
+      ...(platform ? [['Platform', platform] as [string, string]] : []),
+      ...(accountId != null && accountId !== '' ? [['Account ID', String(accountId)] as [string, string]] : []),
+      ...(p.workspace_id ? [['Workspace', String(p.workspace_id)] as [string, string]] : []),
       ['Scheduled', formatDateTime(p.scheduled_at)],
       ['Type', p.post_type || 'unknown'],
+      ...(failure ? [['Failure', failure] as [string, string]] : []),
+      ...(platformPostId ? [['Platform post ID', platformPostId] as [string, string]] : []),
+      ...(groups.length ? [['Group', groups.join(', ')] as [string, string]] : []),
+      ['View in posterly', dashboardUrlForPost({ id: p.id, scheduled_at: p.scheduled_at })],
       ...(p.reel_cover_url ? [['Reel cover', p.reel_cover_url] as [string, string]] : []),
       ...(p.thumbnail_url ? [['Thumbnail', p.thumbnail_url] as [string, string]] : []),
       ...(p.youtube_thumbnail_url ? [['YouTube thumbnail', p.youtube_thumbnail_url] as [string, string]] : []),

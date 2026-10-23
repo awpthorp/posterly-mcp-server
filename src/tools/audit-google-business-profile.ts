@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
 
-const AUDIT_SECTION_ORDER = ['basicInfo', 'hours', 'categories', 'description', 'media', 'attributes', 'reviews'];
+const AUDIT_SECTION_ORDER = ['basicInfo', 'hours', 'categories', 'description', 'media', 'attributes', 'reviews', 'serviceAreas'];
 
 export function formatGoogleBusinessAuditText(result: { audit?: any; fetchedAt?: string }): string {
   const audit = result.audit || {};
@@ -21,7 +21,11 @@ export function formatGoogleBusinessAuditText(result: { audit?: any; fetchedAt?:
     for (const key of keys) {
       const section = sections[key] || {};
       const label = section.label || key;
-      lines.push(`- ${label}: ${section.score ?? 'n/a'}/${section.maxScore ?? 'n/a'}`);
+      const scoreText = section.maxScore === 0
+        ? 'not used for this listing'
+        : `${section.score ?? 'n/a'}/${section.maxScore ?? 'n/a'}`;
+      const note = section.maxScore !== 0 && section.note ? ` (${section.note})` : '';
+      lines.push(`- ${label}: ${scoreText}${note}`);
     }
   }
   if (recommendations.length > 0) {
@@ -36,7 +40,7 @@ export function formatGoogleBusinessAuditText(result: { audit?: any; fetchedAt?:
 export const auditGoogleBusinessProfileTool = {
   name: 'audit_google_business_profile',
   description:
-    'Run a live local-profile audit for a connected Google Business Profile location. Returns the 0-100 completeness score, letter grade, a score for each section (profile basics, hours, categories, description, photos, attributes, review health), and recommendations.',
+    'Run a live local-profile audit for a connected Google Business Profile location. Returns the 0-100 completeness score, letter grade, a score for each section (profile basics, hours, categories, description, photos, attributes, review health, and service areas when the listing travels to customers), and recommendations. A service listing with no areas, or an area more than 80 miles from the business in a straight line, cannot keep a top score.',
   inputSchema: z.object({
     workspace_id: z.string().optional().describe('Filter to a workspace ID from whoami.'),
     account_id: z.number().int().positive().optional().describe('Google Business account ID from list_accounts.'),

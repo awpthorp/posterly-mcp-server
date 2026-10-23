@@ -150,6 +150,20 @@ export type ValidateModeResult =
 
 const MODE_COMMON_PARAMS = new Set(['confirm', 'preview_id']);
 
+// Same rules as mcp-server/src/lib/id-text.ts. Inlined because this file is
+// compiled by Next, which does not resolve a relative .js import to .ts.
+const GROUPED_INTEGER = /^[+-]?\d{1,3}(?:,\d{3})+$/;
+
+function isIdParamName(name: string): boolean {
+  return /(?:^|_)ids?$/.test(name);
+}
+
+function stripGroupedInteger(value: string): string {
+  const trimmed = value.trim();
+  if (!GROUPED_INTEGER.test(trimmed)) return value;
+  return trimmed.replace(/,/g, '');
+}
+
 function modeEntries(tool: ToolRegistryTool): Record<string, ToolModeEntry> | null {
   return tool.views ?? tool.actions ?? null;
 }
@@ -159,7 +173,10 @@ function normalizeParam(name: string, value: unknown, spec: ModeParamSpec, where
     case 'integer':
     case 'number': {
       let n: unknown = value;
-      if (typeof value === 'string' && value.trim() !== '' && /^-?\d+(\.\d+)?$/.test(value.trim())) n = Number(value.trim());
+      if (typeof value === 'string') {
+        const stripped = stripGroupedInteger(value).trim();
+        if (stripped !== '' && /^-?\d+(\.\d+)?$/.test(stripped)) n = Number(stripped);
+      }
       if (typeof n !== 'number' || !Number.isFinite(n)) return { ok: false, error: `${name} must be a number${where}.` };
       if (spec.type === 'integer' && !Number.isInteger(n)) return { ok: false, error: `${name} must be a whole number${where}.` };
       if (spec.min != null && n < spec.min) return { ok: false, error: `${name} must be at least ${spec.min}${where}.` };
@@ -169,6 +186,7 @@ function normalizeParam(name: string, value: unknown, spec: ModeParamSpec, where
     }
     case 'string': {
       if (typeof value === 'number' && Number.isFinite(value)) value = String(value);
+      else if (typeof value === 'string' && isIdParamName(name)) value = stripGroupedInteger(value);
       if (typeof value !== 'string') return { ok: false, error: `${name} must be a string${where}.` };
       if (spec.enum && !spec.enum.includes(value)) return { ok: false, error: `${name} must be one of ${spec.enum.join(', ')}${where}.` };
       return { ok: true, value };

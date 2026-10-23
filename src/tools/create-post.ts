@@ -176,7 +176,7 @@ export const createPostPayloadInputSchema = z.object({
     .enum(SUPPORTED_PLATFORM_INPUTS)
     .optional()
     .describe(`Platform name (required with username). Supported: ${SUPPORTED_PLATFORM_IDS.join(', ')}. Aliases such as x, gmb, and instagram-standalone are accepted.`),
-  caption: z.string().optional().describe('The post caption/text content. On Instagram, @username creates a caption mention only; it is not a native media tag or collaborator invitation. Ignored when `thread_posts` is provided.'),
+  caption: z.string().optional().describe('The post caption/text content. On Instagram, @username is a caption mention, not a native tag or collaborator invite. Optional on Instagram Stories (first slide only in a series). Ignored when `thread_posts` is provided.'),
   scheduled_at: z
     .string()
     .optional()
@@ -319,13 +319,14 @@ export async function buildCreatePostPayload(
 
   // Mirror the server rule (lib/api-v1-post-create.ts): a post needs a caption
   // OR media, not a caption unconditionally. Requiring one here made every
-  // media-only post impossible from the npm client, most visibly Instagram and
-  // Facebook Stories, which carry no caption at all. The dashboard composer and
-  // the hosted MCP have always allowed it; only this package disagreed.
+  // media-only post impossible from the npm client. An Instagram Story can
+  // also include an optional caption. A Facebook Story does not take a caption.
+  // The dashboard composer and the hosted MCP have always allowed media-only
+  // posts; only this package used to disagree.
   const hasMedia = Boolean(input.media_url) || (input.media_urls?.length ?? 0) > 0;
   if (!caption && !hasMedia) {
     throw new Error(
-      'Provide caption or media (or pass `thread_posts` for an X/Threads thread). Media-only posts are valid, for example an Instagram or Facebook Story.',
+      'Provide caption or media (or pass `thread_posts` for an X/Threads thread). Media-only posts are valid. An Instagram Story can also include an optional caption. A Facebook Story does not take a caption.',
     );
   }
 

@@ -1,11 +1,11 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
-import { formatPagingNote, mdTitle, mdSection, mdKeyValue, mdEmpty, truncateText } from '../lib/format.js';
+import { formatPagingNote, mdTitle, mdSection, mdKeyValue, mdEmpty } from '../lib/format.js';
 
 export const listPostSuggestionsTool = {
   name: 'list_post_suggestions',
   description:
-    "List proactive post suggestions: evidence-based weekly drafts posterly writes in each account's learned voice, each with a rationale tying it back to what has performed well for that account. Filter by account_id and status (pending, scheduled, dismissed; default pending). The output says whether every matching suggestion is shown; page with offset until it does. Read-only; requires a Pro plan or higher. Use dismiss_suggestion to hide one.",
+    "List proactive post suggestions: evidence-based weekly drafts posterly writes in each account's learned voice, each with a rationale tying it back to what has performed well for that account. The caption, rationale, and account id are returned in full. Filter by account_id and status (pending, scheduled, dismissed; default pending). The output says whether every matching suggestion is shown; page with offset until it does. Read-only; requires a Pro plan or higher. Use dismiss_suggestion to hide one, or pass save_as_draft true on that tool to keep it as an unpublished draft.",
   inputSchema: z.object({
     account_id: z
       .union([z.string(), z.number()])
@@ -46,10 +46,11 @@ export const listPostSuggestionsTool = {
         label,
         mdKeyValue([
           ['Suggestion ID', suggestion.id],
+          ['Account ID', String(suggestion.social_account_id)],
           ['Status', suggestion.status],
           ['Period', suggestion.period_key || undefined],
-          ['Caption', truncateText(suggestion.caption, 240)],
-          ['Rationale', suggestion.rationale ? truncateText(suggestion.rationale, 240) : undefined],
+          ['Caption', suggestion.caption.replace(/\s+/g, ' ').trim()],
+          ['Rationale', suggestion.rationale ? suggestion.rationale.replace(/\s+/g, ' ').trim() : undefined],
         ]),
       );
     });

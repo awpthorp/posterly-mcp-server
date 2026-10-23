@@ -1,5 +1,67 @@
 import type { Account, LearnedVoice, ListPostsResponse, Post, PostCountsResponse, PostsRangeEcho } from './api-client.js';
 
+export function platformText(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    const parts = value.map((item) => (item == null ? '' : String(item).trim())).filter(Boolean);
+    return parts.length ? parts.join(', ') : undefined;
+  }
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  return undefined;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function scalarText(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  return undefined;
+}
+
+const PLATFORM_POST_ID_KEYS = ['platform_post_id', 'instagram_media_id', 'facebook_post_id', 'x_tweet_id', 'threads_media_id'] as const;
+
+/** The saved live post id, from the row or the metadata keys publish actually writes. */
+export function platformPostIdText(post: { platform_post_id?: unknown; metadata?: unknown }): string | undefined {
+  const direct = scalarText(post.platform_post_id);
+  if (direct) return direct;
+  const meta = asRecord(post.metadata);
+  for (const key of PLATFORM_POST_ID_KEYS) {
+    const value = scalarText(meta[key]);
+    if (value) return value;
+  }
+  return scalarText(asRecord(meta.bluesky).uri);
+}
+
+/** Caller group and release ids already stored on the post. Order is stable and duplicates are dropped. */
+export function groupReleaseIds(post: { post_group_id?: unknown; metadata?: unknown }): string[] {
+  const meta = asRecord(post.metadata);
+  const values = [post.post_group_id, meta.post_group_id, meta.api_group_id, meta.group_id, meta.release_id];
+  return [...new Set(values.map(scalarText).filter((value): value is string => Boolean(value)))];
+}
+
+/** Why a publish failed, when the payload includes it. */
+export function postFailureText(post: { failure?: unknown; publish_error?: unknown; error_message?: unknown }): string | undefined {
+  const failure = asRecord(post.failure);
+  const message = scalarText(failure.message) || scalarText(asRecord(post.publish_error).message) || scalarText(post.error_message);
+  if (!message) return undefined;
+  const code = scalarText(failure.code);
+  return code && !message.includes(code) ? `${message} (${code})` : message;
+}
+
+/**
+ * The live missing-content report: object items, or a post plus ready/next_actions.
+ * The older `{ missing: ["media"] }` body (no post) stays on the generic formatter.
+ */
+export function isStructuredMissingReport(data: unknown): boolean {
+  if (!data || typeof data !== 'object') return false;
+  const body = data as { missing?: unknown; post?: unknown; ready?: unknown; next_actions?: unknown };
+  if (!Array.isArray(body.missing)) return false;
+  if (body.missing.some((item) => item && typeof item === 'object')) return true;
+  return Boolean(body.post) && ('ready' in body || Array.isArray(body.next_actions));
+}
+
 type CellValue = string | number | boolean | null | undefined;
 
 const POSTERLY_APP_URL = (process.env.POSTERLY_URL || 'https://www.poster.ly').replace(/\/$/, '');
@@ -8,11 +70,39 @@ export const DASHBOARD_CALENDAR_URL = `${POSTERLY_APP_URL}/dashboard/calendar`;
 export const DASHBOARD_TABLE_URL = `${POSTERLY_APP_URL}/dashboard/table`;
 export const DASHBOARD_CONNECT_URL = `${POSTERLY_APP_URL}/dashboard/connect`;
 
+/** Assistant label for the coarse account health fields. Empty when the payload has none. */
+export function connectionHealthLabel(account: {
+  connection_status?: string | null;
+  connection_reason?: string | null;
+  connection_since?: string | null;
+}): string {
+  if (account.connection_status === 'needs_reconnect') {
+    const reason = account.connection_reason === 'access_token_expired'
+      ? 'access token expired'
+      : 'reconnect required';
+    const since = account.connection_since ? ` since ${account.connection_since}` : '';
+    return `needs reconnect (${reason}${since})`;
+  }
+  if (account.connection_status === 'ok') return 'ok';
+  return '';
+}
+
 export function formatLocalDateTime(value?: string | null): string {
   if (!value) return 'N/A';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatIsoTimestamp(value);
+}
+
+/** Account and parent-post fields the inbox already stores on a comment. No posterly post id exists on the row. */
+export function inboxCommentContext(comment: unknown): { accountId?: string; caption?: string; link?: string } {
+  const row = comment && typeof comment === 'object' ? (comment as Record<string, unknown>) : {};
+  const rawId = row.social_account_id;
+  const accountId = rawId != null && rawId !== '' ? String(rawId) : undefined;
+  const preview = row.post_preview && typeof row.post_preview === 'object' ? (row.post_preview as Record<string, unknown>) : null;
+  const caption = typeof preview?.caption === 'string' ? preview.caption.replace(/\s+/g, ' ').trim() : '';
+  const link = typeof preview?.permalink === 'string' ? preview.permalink.trim() : '';
+  return { accountId, caption: caption || undefined, link: link || undefined };
 }
 
 export function dashboardUrlForPost(post: Pick<Post, 'id' | 'scheduled_at'>): string {
@@ -137,7 +227,7 @@ export function formatDateTime(value: string | null | undefined): string {
   if (!value) return 'n/a';
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString();
+  return formatIsoTimestamp(value);
 }
 
 export function formatDate(value: string | null | undefined): string {
@@ -220,8 +310,20 @@ export function statusLabel(status: string | null | undefined): string {
   return status || 'unknown';
 }
 
+const GROUPED_INTEGER = /^[+-]?\d{1,3}(?:,\d{3})+$/;
+
+/** Plain digits for an id, or null when code() should use the normal cell formatter. Keep in step with id-text.ts. */
+function idCodeText(value: CellValue): string | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (typeof value === 'string' && GROUPED_INTEGER.test(value.trim())) return value.trim().replace(/,/g, '');
+  return null;
+}
+
 export function code(value: CellValue): string {
-  return `\`${formatCell(value).replace(/`/g, '\\`')}\``;
+  // Ids stay plain digits. formatCell would print 1961 as "1,961", which is
+  // not a valid id to paste back into another tool. Metrics do not use code().
+  const text = idCodeText(value) ?? formatCell(value);
+  return `\`${text.replace(/`/g, '\\`')}\``;
 }
 
 function formatCell(value: CellValue): string {
@@ -342,6 +444,56 @@ export function formatPostRange(range: PostListRange): string {
   return `${[from, to].filter(Boolean).join(' ')} (${tz})`;
 }
 
+export type PublicApiKeyRow = {
+  id?: string;
+  name?: string;
+  key_prefix?: string;
+  scopes?: string[];
+  created_at?: string | null;
+  last_used_at?: string | null;
+};
+
+/** Assistant card for GET /api/v1/api-keys. Prints only the public fields. */
+export function formatApiKeyList(keys: PublicApiKeyRow[] | null | undefined): string {
+  const rows = Array.isArray(keys) ? keys : [];
+  const table = rows.length
+    ? mdTable(
+      ['Name', 'Prefix', 'Scopes', 'Created', 'Last used', 'Key ID'],
+      rows.map((key) => [
+        key.name || 'unnamed',
+        key.key_prefix || 'n/a',
+        key.scopes?.length ? key.scopes.join(', ') : 'none',
+        key.created_at ? formatIsoTimestamp(key.created_at) : 'unknown',
+        key.last_used_at ? formatIsoTimestamp(key.last_used_at) : 'never',
+        code(String(key.id || '')),
+      ]),
+    )
+    : 'No API keys on this account.';
+  return [
+    mdTitle('API keys'),
+    table,
+    'The secret is never listed. Revoke one with delete_api_key. That tool refuses to revoke the key making the call.',
+  ].join('\n\n');
+}
+
+/** ISO 8601 in UTC to the second ("2026-10-07T07:32:54Z"); "unknown" when missing. */
+export function formatIsoTimestamp(value: string | null | undefined): string {
+  if (!value) return 'unknown';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toISOString().replace(/\.\d{3}Z$/, 'Z');
+}
+
+/** "Georgia via Dashboard"; whichever half was never recorded reads as unknown. */
+export function formatPostCreator(creator: Post['created_by']): string {
+  const who = creator?.name || (creator?.user_id ? `user ${creator.user_id}` : null);
+  const via = creator?.source_label || null;
+  if (who && via) return `${who} via ${via}`;
+  if (who) return `${who} (source unknown)`;
+  if (via) return `via ${via} (account unknown)`;
+  return 'unknown';
+}
+
 function approvalCell(post: Post): string {
   if (!post.approval || post.approval.status === 'none') return 'none';
   return post.approval.waiting_on ? `${post.approval.status} (waiting on ${post.approval.waiting_on})` : post.approval.status;
@@ -384,8 +536,9 @@ export function formatPostListPage(
       ? `**Complete: all ${total} matching posts are shown.**`
       : `**Complete: this is the last page (posts ${first}-${last} of ${total}).**`;
 
+  const showPlatform = posts.some((post) => platformText(post.platform));
   const table = mdTable(
-    ['Status', 'Post ID', `Scheduled (${tz})`, 'Type', 'Account ID', 'Brand ID', 'Approval', 'Caption'],
+    ['Status', 'Post ID', `Scheduled (${tz})`, 'Type', ...(showPlatform ? ['Platform'] : []), 'Account ID', 'Brand ID', 'Approval', 'Created', 'Created by', 'Caption'],
     // The API post row carries account and brand IDs only (no joined names);
     // list_accounts and list_brands, or view=counts, resolve them.
     posts.map((post) => [
@@ -393,9 +546,12 @@ export function formatPostListPage(
       code(String(post.id)),
       formatDateTimeInZone(post.scheduled_at, tz),
       post.post_type || 'post',
+      ...(showPlatform ? [platformText(post.platform) || 'n/a'] : []),
       post.social_account_id != null ? String(post.social_account_id) : 'n/a',
       post.brand_id || 'none',
       approvalCell(post),
+      formatIsoTimestamp(post.created_at),
+      formatPostCreator(post.created_by),
       compactText(post.content, 80) || '(empty)',
     ]),
   );
@@ -432,7 +588,7 @@ export function formatPostCounts(data: PostCountsResponse): string {
       (data.by_account || []).map((row) => [
         row.username ? `@${row.username}` : row.account_id ? 'unknown account' : 'no account',
         row.platform || 'n/a',
-        row.account_id ?? 'none',
+        row.account_id != null && row.account_id !== '' ? String(row.account_id) : 'none',
         row.count,
       ]),
     )),

@@ -28,7 +28,7 @@ function formatCanceled(result: CancelSubscriptionResponse): string {
 export const cancelSubscriptionTool = {
   name: 'cancel_subscription',
   description:
-    "Cancel the authenticated user's posterly subscription. DESTRUCTIVE billing action; requires the billing:write scope. ALWAYS ask the user why they are cancelling FIRST and pass their answer as `reason` (one of the allowed values). By default an active or trialing plan is set to cancel at the end of the current period. A past_due or unpaid plan always ends now, even when immediate is false: the unpaid renewal is dropped and payment retries stop. Pass immediate=true only when the user explicitly wants an active plan cancelled right now. Only call after the user explicitly confirms.",
+    "Cancel the authenticated user's posterly subscription. DESTRUCTIVE; requires billing:write. ALWAYS ask the user why they are cancelling FIRST and pass their answer as `reason` (one of the allowed values). By default an active or trialing plan is set to cancel at the end of the current period. A past_due or unpaid plan always ends now, even when immediate is false: the unpaid renewal is dropped and payment retries stop. Pass immediate=true only when the user explicitly wants an active plan cancelled right now. Only call after the user explicitly confirms.",
   inputSchema: z.object({
     reason: z.enum(CANCELLATION_REASONS).describe('Why the user is cancelling. Ask the user before calling; do not guess.'),
     feedback: z.string().max(2000).optional().describe('Optional free-text detail the user gave about why they are cancelling.'),

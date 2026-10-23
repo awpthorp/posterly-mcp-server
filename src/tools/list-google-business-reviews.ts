@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { PosterlyClient, GoogleBusinessLocationReviewSummary } from '../lib/api-client.js';
 import { formatDate } from '../lib/format.js';
+import { reviewNameFromListItem, reviewReplyComment } from '../lib/google-business-review-name.js';
 import { validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 /** Matches GOOGLE_BUSINESS_REVIEWS_MAX_LIMIT in lib/api-v1-google-business.ts. */
@@ -20,7 +21,7 @@ type ReviewsInput = {
 export const listGoogleBusinessReviewsTool = {
   name: 'list_google_business_reviews',
   description:
-    'Google Business Profile reviews. view=reviews (default): reviews for one location/account or every accessible GBP location, paging through all reviews Google has (not just the first 50) with the full untruncated review text, its date, and each location\'s total review count; filter by rating or unanswered, page with limit/offset. view=review_link (account_id or location_id): the direct public Google review link plus the Google Place ID (ChIJ...); that Place ID is output only and must NOT be passed back as location_id.',
+    'Google Business Profile reviews. view=reviews (default): reviews for one location/account or every accessible GBP location, paging through all reviews Google has (not just the first 50) with the full untruncated review text, its date, and each location\'s total review count; filter by rating or unanswered, page with limit/offset. Each review has review_name for manage_google_business_review reply/delete_reply. view=review_link (account_id or location_id): the direct public Google review link plus the Google Place ID (ChIJ...); that Place ID is output only and must NOT be passed back as location_id.',
   inputSchema: z.object({
     view: z.enum(['reviews', 'review_link']).optional().describe('reviews (default) or review_link.'),
     workspace_id: z.string().optional().describe('Filter to a workspace ID from whoami.'),
@@ -96,8 +97,15 @@ async function reviews(client: PosterlyClient, input: ReviewsInput): Promise<str
     const rating = review.starRating ? `${review.starRating} stars` : 'unrated';
     const location = review.businessName || review.locationName || review.locationId || 'location';
     const date = formatReviewDate(review);
-    const replied = review.reviewReply ? 'replied' : 'unanswered';
+    const replyComment = reviewReplyComment(review);
+    const replied = replyComment ? `reply: ${replyComment}` : (review.reviewReply ? 'replied' : 'unanswered');
     lines.push(`- ${name} (${rating}, ${date}, ${location}, ${replied})`);
+    const reviewName = reviewNameFromListItem(review);
+    if (reviewName) lines.push(`  review_name: ${reviewName}`);
+    if (review.account_id != null && String(review.account_id) !== '') {
+      lines.push(`  account_id: ${String(review.account_id)}`);
+    }
+    if (review.locationId) lines.push(`  location_id: ${review.locationId}`);
     // Full review text, no truncation; collapse whitespace only so the
     // bullet list stays readable for multi-paragraph reviews.
     if (review.comment) {

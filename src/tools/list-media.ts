@@ -5,7 +5,7 @@ import { formatPagingNote } from '../lib/format.js';
 export const listMediaTool = {
   name: 'list_media',
   description:
-    'List the newest media assets for the authenticated user. After create_media_drop, pass drop_session_id to see files the human uploaded on /drop/<token>. Use public_url with validate_post / create_post. The output says whether every matching file is shown; page with offset (offset + limit up to 1000) when it is not.',
+    'List the newest media assets for the authenticated user. After create_media_drop, pass drop_session_id to see files the human uploaded on /drop/<token>. Each file includes its filename and the time it was added. Use public_url with validate_post / create_post. A drop listing returns up to 20 files per page by default so a full drop fits one page. The output says whether every matching file is shown; page with offset (offset + limit up to 1000) when it is not.',
   inputSchema: z.object({
     limit: z
       .number()
@@ -13,7 +13,7 @@ export const listMediaTool = {
       .min(1)
       .max(50)
       .optional()
-      .describe('Number of assets to return (default 10, max 50)'),
+      .describe('Number of assets to return (default 10, or 20 when drop_session_id is set; max 50)'),
     offset: z
       .number()
       .int()
@@ -46,7 +46,8 @@ export const listMediaTool = {
     const lines = result.media.map((item) => {
       const size = typeof item.bytes === 'number' ? `${item.bytes} bytes` : 'unknown size';
       const drop = item.drop_session_id ? ` drop=${item.drop_session_id}` : '';
-      return `• ${item.filename} (${item.mime || 'unknown'}, ${size})${drop}\n  public_url: ${item.public_url}`;
+      const added = item.created_at ? `, added ${item.created_at}` : '';
+      return `• ${item.filename} (${item.mime || 'unknown'}, ${size}${added})${drop}\n  public_url: ${item.public_url}`;
     });
 
     const offset = result.offset ?? input.offset ?? 0;

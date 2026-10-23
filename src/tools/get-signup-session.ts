@@ -1,10 +1,15 @@
 import { z } from 'zod';
-import type { PosterlyClient, PublicSignupSession } from '../lib/api-client.js';
+import {
+  signupCheckoutChargeLine,
+  signupCheckoutIsTrial,
+  type PosterlyClient,
+  type PublicSignupSession,
+} from '../lib/api-client.js';
 
 export const getSignupSessionTool = {
   name: 'get_signup_session',
   description:
-    'Poll a public posterly signup session created by start_signup. Use this to narrate payment (Link virtual card or browser Checkout), password setup, and agent access status before a posterly API key is installed. Keep updates user-facing; do not narrate raw HTTP, curl, or API plumbing.',
+    'Poll a public posterly signup session created by start_signup. Use this to narrate the free trial (card saved, nothing charged today), password setup, and agent access status before a posterly API key is installed. An account that already had a trial is charged at checkout instead. Keep updates user-facing; do not narrate raw HTTP, curl, or API plumbing.',
   inputSchema: z.object({
     session_id: z
       .string()
@@ -43,9 +48,7 @@ function formatSignupSession(session: PublicSignupSession, includeRaw: boolean):
     agentPay?.requires_tos_acceptance ? 'Terms acceptance required before client_secret is released.' : '',
     agentPay?.client_secret ? `PaymentIntent client_secret: ${agentPay.client_secret}` : '',
     agentPay?.confirm_url ? `Confirm URL: ${agentPay.confirm_url}` : '',
-    !agentPay?.enabled && payment?.amount_display
-      ? `Amount due: ${payment.amount_display} ${String(payment.currency || 'usd').toUpperCase()} to ${payment.merchant_name || 'posterly'} (${payment.billing || 'subscription'})`
-      : '',
+    !agentPay?.enabled ? signupCheckoutChargeLine(payment) : '',
     !agentPay?.enabled && payment?.agent_wallet?.how
       ? `Agent wallet option: ${payment.agent_wallet.how}`
       : '',
@@ -58,6 +61,7 @@ function formatSignupSession(session: PublicSignupSession, includeRaw: boolean):
       session.status,
       Boolean(agentPay?.enabled || agentPay?.payment_intent_id),
       Boolean(agentPay?.requires_tos_acceptance),
+      signupCheckoutIsTrial(payment),
     ),
     session.agent_next_steps?.length
       ? `Agent next steps:\n${session.agent_next_steps.map((step, index) => `${index + 1}. ${step}`).join('\n')}`
@@ -73,14 +77,22 @@ function stringFromRecord(record: Record<string, unknown> | undefined, key: stri
   return typeof value === 'string' ? value : null;
 }
 
-function guidanceForStatus(status: string, agentPayAvailable = false, requiresTosAcceptance = false): string {
+function guidanceForStatus(
+  status: string,
+  agentPayAvailable = false,
+  requiresTosAcceptance = false,
+  trialCheckout = false,
+): string {
   switch (status) {
     case 'checkout_pending':
       if (agentPayAvailable && requiresTosAcceptance) {
         return 'Payment is still pending on terms acceptance. Ask the user to explicitly confirm they accept the posterly terms at https://www.poster.ly/terms, then POST { "tos_accepted": true } to Confirm URL to receive client_secret, or send the user the Checkout handoff URL. Keep polling; never ask for card numbers.';
       }
-      return agentPayAvailable
-        ? 'Payment is still pending. Confirm the prepaid PaymentIntent with a Link virtual card (credential_type: card), or send the user the Checkout handoff URL. Keep polling; never ask for card numbers.'
+      if (agentPayAvailable) {
+        return 'Payment is still pending. Confirm the prepaid PaymentIntent with a Link virtual card (credential_type: card), or send the user the Checkout handoff URL. Keep polling; never ask for card numbers.';
+      }
+      return trialCheckout
+        ? 'Tell the user checkout is still waiting for a card to start the free trial. Nothing is charged today. Send the Checkout handoff URL. If you complete Checkout yourself, use only a reusable card: a one-time virtual card fails when the trial ends. Keep polling. Never ask for card details.'
         : 'Tell the user checkout is still pending. If you hold an approved payment credential such as a Link agent wallet, you may pay the Checkout handoff URL yourself instead of asking the user; otherwise keep polling. Never ask for card details.';
     case 'checkout_expired':
       return 'Tell the user checkout expired and offer to call start_signup again.';

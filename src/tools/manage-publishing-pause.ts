@@ -23,7 +23,7 @@ export const managePublishingPauseTool = {
     workspace_id: z.string().optional().describe('Workspace ID from whoami. Defaults to your default workspace.'),
     brand_id: z.string().optional().describe('pause and resume: a brand ID from list_brands. Leave it out (never empty) for the whole workspace.'),
     post_ids: z.array(z.number().int().positive()).max(500).optional().describe('publish_missed: the missed post IDs a resume returned.'),
-    confirm: z.boolean().optional().describe('pause: leave out to get a preview; true only after the user agreed. publish_missed: true after the user agreed. resume: not needed.'),
+    confirm: z.boolean().optional().describe('pause: leave out to preview. pause and publish_missed: true only after the user agreed. resume: not needed.'),
   }),
 
   async execute(client: PosterlyClient, input: ManagePublishingPauseInput, ctx: ToolContext) {

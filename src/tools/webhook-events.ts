@@ -9,6 +9,8 @@ export const WEBHOOK_EVENTS = [
   'post.published',
   'post.failed',
   'account.disconnected',
+  'account.needs_reconnect',
+  'account.reconnected',
   'analytics.synced',
   'approval.requested',
   'approval.approved',

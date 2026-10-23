@@ -13,10 +13,10 @@ type ListPostsInput = ListPostsParams & {
 
 export const LIST_POSTS_DESCRIPTION =
   'Posts in your workspaces, teammates\' too, per your role there (brand-locked seats only see their assigned brands). If workspace_id is omitted, this searches every workspace you belong to. ' +
-  'view=list (default): posts filtered by status (scheduled, published, failed, draft), platform, account_id, workspace_id, brand_id, approval_status, approval_waiting_on, and a scheduled date range: scheduled_from (inclusive) and scheduled_to (a plain date includes that whole day), read in timezone (IANA, default UTC; also the zone times are shown in). Returns limit posts (default 20, max 200) starting at offset; with a date range the order defaults to oldest first (order=asc|desc). ' +
+  'view=list (default): posts filtered by status (draft, scheduled, publishing, processing, awaiting_tiktok_publish, awaiting_manual, published, failed, paused, paused_due_to_token, paused_due_to_billing, or missed), platform, account_id, workspace_id, brand_id, group_id, release_id, approval_status, approval_waiting_on, and a scheduled date range: scheduled_from (inclusive) and scheduled_to (a plain date includes that whole day), read in timezone (IANA, default UTC; also the zone times are shown in). status=missed is posts that failed, scheduled posts whose scheduled time is already past, and posts a publishing pause held past their time. group_id matches the caller group (including post_group_id). release_id matches that release only. Returns limit posts (default 20, max 200) starting at offset; with a date range the order defaults to oldest first (order=asc|desc). ' +
   'The output always says whether every matching post was shown. If it says more are available, call again with the offset it gives and keep paging until all are shown before drawing any conclusion about totals, gaps, or how busy a client is. ' +
   'view=counts (scheduled_from and scheduled_to required, up to 366 days): exact totals per day, status, account, and brand for the same filters (limit, offset, and order are ignored); use it for "how many" or "is this month full" questions. ' +
-  'approval_waiting_on=client is the same queue as approval_status=pending_client. Each post includes approval.pending_client_approval.';
+  'Each post includes approval.pending_client_approval.';
 
 export const listPostsTool = {
   name: 'list_posts',
@@ -25,11 +25,19 @@ export const listPostsTool = {
     view: z
       .enum(['list', 'counts'])
       .optional()
-      .describe('list (default): the posts themselves, one page at a time. counts: exact totals per day, status, account, and brand (needs scheduled_from and scheduled_to).'),
+      .describe('list (default): the posts. counts: totals (needs scheduled_from and scheduled_to).'),
     status: z
       .string()
       .optional()
-      .describe('Filter by status: draft, scheduled, published, failed'),
+      .describe('Stored post status (draft, scheduled, publishing, processing, awaiting_tiktok_publish, awaiting_manual, published, failed, paused, paused_due_to_token, paused_due_to_billing, or missed). paused_due_to_token is a reconnect pause and paused_due_to_billing is a billing pause. missed: failed, still scheduled after the scheduled time, or held by a publishing pause past it.'),
+    group_id: z
+      .string()
+      .optional()
+      .describe('Caller group id. Matches api_group_id, group_id, and post_group_id.'),
+    release_id: z
+      .string()
+      .optional()
+      .describe('Caller release id. Matches release_id only.'),
     platform: z
       .enum(SUPPORTED_PLATFORM_INPUTS)
       .optional()
@@ -65,7 +73,7 @@ export const listPostsTool = {
       .int()
       .min(0)
       .optional()
-      .describe('How many matching posts to skip. Use the offset the previous page gives to get the next page. Ignored by view=counts.'),
+      .describe('Matching posts to skip; use the offset the previous page gives. Ignored by view=counts.'),
     workspace_id: z
       .string()
       .optional()
@@ -107,6 +115,8 @@ export const listPostsTool = {
 function postFilters(input: ListPostsInput): ListPostsParams {
   return {
     status: input.status,
+    group_id: input.group_id,
+    release_id: input.release_id,
     platform: input.platform,
     account_id: input.account_id,
     workspace_id: input.workspace_id,

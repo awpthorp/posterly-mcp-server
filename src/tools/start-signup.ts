@@ -1,12 +1,18 @@
 import { z } from 'zod';
-import type { PosterlyClient, PublicSignupResponse, PublicSignupTier } from '../lib/api-client.js';
+import {
+  signupCheckoutChargeLine,
+  signupCheckoutIsTrial,
+  type PosterlyClient,
+  type PublicSignupResponse,
+  type PublicSignupTier,
+} from '../lib/api-client.js';
 
 const DEFAULT_RETURN_PATH = '/dashboard/api?api_signup=success';
 
 export const startSignupTool = {
   name: 'start_signup',
   description:
-    'Start the public posterly paid signup flow for a user before posterly API access exists. Returns a signup poll URL, a browser Checkout fallback URL, and, when enabled, a prepaid PaymentIntent the agent can pay with a Link Agent Wallet virtual card (credential_type: card). The user still sets a password and approves social OAuth in the browser. Never ask for card numbers, a posterly password, or social passwords in chat.',
+    'Start the public posterly signup for a user before posterly API access exists. A new account starts a 7-day free trial: Stripe Checkout collects a card, nothing is charged today, and the card is charged on day 8 unless the paid plan starts sooner. API and MCP stay limited during the trial. The API add-on is still required. Returns a signup poll URL, a browser Checkout handoff URL, and a payment object for that Checkout session (trial length, whether anything is charged today, merchant, and agent-wallet instructions). An account that already had a trial is charged at checkout instead. The user still sets a password and approves social OAuth in the browser. Never ask for card numbers, a posterly password, or social passwords in chat.',
   inputSchema: z.object({
     email: z
       .string()
@@ -106,9 +112,7 @@ function formatSignupStart(response: PublicSignupResponse, includeRaw: boolean):
     agentPay?.client_secret ? `PaymentIntent client_secret: ${agentPay.client_secret}` : '',
     agentPay?.confirm_url ? `Confirm URL: ${agentPay.confirm_url}` : '',
     agentPay?.pay_instructions ? `Pay instructions: ${agentPay.pay_instructions}` : '',
-    !agentPay?.enabled && payment?.amount_display
-      ? `Amount due: ${payment.amount_display} ${String(payment.currency || 'usd').toUpperCase()} to ${payment.merchant_name || 'posterly'} (${payment.billing || 'subscription'})`
-      : '',
+    !agentPay?.enabled ? signupCheckoutChargeLine(payment) : '',
     !agentPay?.enabled && payment?.agent_wallet?.how
       ? `Agent wallet option: ${payment.agent_wallet.how}`
       : '',
@@ -132,6 +136,15 @@ function formatSignupStart(response: PublicSignupResponse, includeRaw: boolean):
           '2. If the user would rather pay on the website, send them the Checkout handoff URL instead.',
           '3. Call get_signup_session with the signup session ID until the status changes.',
           '4. Tell the user when posterly sends the password setup email. Password, social OAuth, and publish approval stay in the browser.',
+          '5. If status becomes agent_access_required, ask the user to install or paste the posterly MCP/API setup instructions into this trusted AI chat, then onboard them in this conversation (about you, connect, brand voice, first post). Do not send them to /onboarding-v2.',
+          '6. Do not ask for card details, the posterly password, social passwords, or OAuth codes.',
+        ]
+      : signupCheckoutIsTrial(payment)
+      ? [
+          '1. Send the Checkout handoff URL to the user so they can save a card in their browser. Nothing is charged today. Use the raw Stripe checkout URL only if you preserve the full URL including any fragment. posterly does not email this link, so do not tell the user to check their inbox at this stage.',
+          '2. If you complete Checkout yourself, use only a reusable card the person has approved for recurring posterly charges. A one-time virtual card fails when the trial ends. Follow the agent wallet option above. Never paste card numbers into chat or send them to posterly.',
+          '3. Call get_signup_session with the signup session ID until the status changes.',
+          '4. Tell the user when posterly sends the password setup email.',
           '5. If status becomes agent_access_required, ask the user to install or paste the posterly MCP/API setup instructions into this trusted AI chat, then onboard them in this conversation (about you, connect, brand voice, first post). Do not send them to /onboarding-v2.',
           '6. Do not ask for card details, the posterly password, social passwords, or OAuth codes.',
         ]

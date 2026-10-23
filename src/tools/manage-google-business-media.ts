@@ -106,6 +106,8 @@ export const manageGoogleBusinessMediaTool = {
                 ['Resource name', code(String(item.name))],
                 ['Type', item.mediaFormat === 'VIDEO' ? 'video' : 'photo'],
                 ['Category', item.category || 'uncategorised'],
+                ['Image', item.googleUrl || item.thumbnailUrl || undefined],
+                ['Added', item.createTime || undefined],
                 ...locationRows(call),
               ]))
             : [

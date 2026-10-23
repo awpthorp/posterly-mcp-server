@@ -134,10 +134,12 @@ export const PLATFORM_MANIFEST = {
     "youtube": "youtube"
   },
   "helperNames": [
+    "linkedin.company_lookup",
     "linkedin.recent_mentions",
     "pinterest.boards",
     "tiktok.creator_info",
-    "x.quota"
+    "x.quota",
+    "youtube.playlists"
   ],
   "analyticsPlatformIds": [
     "instagram",
@@ -335,7 +337,8 @@ export const PLATFORM_MANIFEST = {
       ],
       "analyticsSupported": true,
       "helpers": [
-        "linkedin.recent_mentions"
+        "linkedin.recent_mentions",
+        "linkedin.company_lookup"
       ]
     },
     {
@@ -347,7 +350,9 @@ export const PLATFORM_MANIFEST = {
         "video"
       ],
       "analyticsSupported": true,
-      "helpers": []
+      "helpers": [
+        "youtube.playlists"
+      ]
     },
     {
       "id": "pinterest",
@@ -747,7 +752,7 @@ export const PLANNED_PLATFORM_IDS = ["reddit","medium","skool","whop"] as const;
 export const ALL_PLATFORM_IDS = ["instagram","facebook","tiktok","twitter","linkedin","youtube","pinterest","threads","google_business","telegram","bluesky","discord","slack","mastodon","devto","hashnode","wordpress","lemmy","reddit","medium","skool","whop"] as const;
 export const SUPPORTED_PLATFORM_INPUTS = ["bluesky","devto","discord","facebook","gmb","google-business","google_business","google_business_profile","hashnode","instagram","instagram-standalone","lemmy","linkedin","mastodon","pinterest","slack","telegram","threads","tiktok","twitter","wordpress","x","youtube"] as const;
 export const ALL_PLATFORM_INPUTS = ["bluesky","devto","discord","facebook","gmb","google-business","google_business","google_business_profile","hashnode","instagram","instagram-standalone","lemmy","linkedin","mastodon","medium","pinterest","reddit","skool","slack","telegram","threads","tiktok","twitter","whop","wordpress","x","youtube"] as const;
-export const PLATFORM_HELPER_NAMES = ["linkedin.recent_mentions","pinterest.boards","tiktok.creator_info","x.quota"] as const;
+export const PLATFORM_HELPER_NAMES = ["linkedin.company_lookup","linkedin.recent_mentions","pinterest.boards","tiktok.creator_info","x.quota","youtube.playlists"] as const;
 export const CONNECT_TARGET_IDS = ["instagram","meta","facebook","youtube","tiktok","linkedin","linkedin_page","threads","google_business","pinterest","twitter","telegram","bluesky","discord","slack","mastodon","devto","hashnode","wordpress","lemmy","reddit","medium","skool","whop"] as const;
 export const CONNECT_INPUTS = ["bluesky","devto","discord","facebook","facebook_instagram","facebook_pages","gmb","google-business","google_business","google_business_profile","hashnode","instagram","instagram-standalone","instagram_direct","lemmy","linkedin","linkedin-company","linkedin-page","linkedin_company","linkedin_page","linkedin_personal","mastodon","medium","meta","meta_business","pinterest","reddit","skool","slack","telegram","threads","tiktok","twitter","whop","wordpress","x","x_twitter","youtube"] as const;
 export const ANALYTICS_PLATFORM_IDS = ["instagram","facebook","twitter","linkedin","youtube","pinterest","threads","google_business"] as const;

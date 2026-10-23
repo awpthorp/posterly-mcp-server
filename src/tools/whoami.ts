@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { POSTERLY_MCP_VERSION } from '../lib/version.js';
 import type { PosterlyClient } from '../lib/api-client.js';
 import { resolvePosterlyBaseUrl } from '../lib/api-client.js';
-import { code, mdKeyValue, mdTable, mdTitle } from '../lib/format.js';
+import { code, formatApiKeyList, mdKeyValue, mdTable, mdTitle } from '../lib/format.js';
 import { validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 const NPM_LATEST_URL = 'https://registry.npmjs.org/posterly-mcp-server/latest';
@@ -10,29 +10,33 @@ const NPM_LATEST_URL = 'https://registry.npmjs.org/posterly-mcp-server/latest';
 export const whoamiTool = {
   name: 'whoami',
   description:
-    'Who you are and how posterly is connected. view=identity (default): the authenticated user, API key scopes, workspaces, and onboarding next step. ALWAYS call this at the start of a session; if onboarding.completed is false, walk the remaining onboarding steps IN THIS conversation (about you, connect, brand voice, first post) and do not send the user to /onboarding-v2 or the dashboard composer wizard. view=status: MCP server version, latest npm version, endpoint and API key health, and update guidance; works before POSTERLY_API_KEY is configured.',
+    'Who you are and how posterly is connected. view=identity (default): the authenticated user, API key scopes, workspaces, and onboarding next step. Pass include=api_keys to also list this account\'s API keys (name, prefix, scopes, created, last used). The secret is never included. ALWAYS call this at the start of a session; if onboarding.completed is false, walk the remaining onboarding steps IN THIS conversation (about you, connect, brand voice, first post) and do not send the user to /onboarding-v2 or the dashboard composer wizard. view=status: MCP server version, latest npm version, endpoint and API key health, and update guidance; works before POSTERLY_API_KEY is configured.',
   inputSchema: z.object({
     view: z
       .enum(['identity', 'status'])
       .optional()
       .describe('identity (default): user, scopes, workspaces, onboarding. status: MCP server and connection health.'),
+    include: z
+      .enum(['api_keys'])
+      .optional()
+      .describe('identity only. api_keys lists this account\'s API keys. The secret is never included. Omit it for the usual identity answer.'),
   }),
   /** The old tools' exact input schemas, for alias calls (see alias-transport.ts). */
   legacySchemas: {
     get_mcp_status: z.object({}),
   },
 
-  async execute(client: PosterlyClient, input: { view?: 'identity' | 'status' }, ctx: ToolContext) {
-    const { mode } = validateArgs(ctx, 'whoami', input);
+  async execute(client: PosterlyClient, input: { view?: 'identity' | 'status'; include?: 'api_keys' }, ctx: ToolContext) {
+    const { mode, args } = validateArgs(ctx, 'whoami', input);
     if (mode === 'status') return mcpStatus(client);
-    return identity(client, ctx);
+    return identity(client, ctx, args.include === 'api_keys');
   },
 };
 
-async function identity(client: PosterlyClient, ctx: ToolContext): Promise<string> {
+async function identity(client: PosterlyClient, ctx: ToolContext, includeKeys: boolean): Promise<string> {
   const info = await client.whoami();
 
-  const text = [
+  let text = [
     mdTitle('posterly identity'),
     mdKeyValue([
       ['User', info.user.email || code(info.user.id)],
@@ -56,6 +60,11 @@ async function identity(client: PosterlyClient, ctx: ToolContext): Promise<strin
     ),
     '**Tip:** Pass `workspace_id` to `create_post`, `list_posts`, `list_accounts`, and `find_available_slot` when you want the assistant to stay inside one workspace.',
   ].filter(Boolean).join('\n\n');
+
+  if (includeKeys) {
+    const listed = await client.listApiKeys();
+    text = `${text}\n\n${formatApiKeyList(listed.api_keys)}`;
+  }
 
   // Only when tool sets are filtered, so the default answer is unchanged.
   const toolsets = ctx.toolsets;

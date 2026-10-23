@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
-import { formatLocalDateTime, truncateText } from '../lib/format.js';
+import { formatLocalDateTime, inboxCommentContext, truncateText } from '../lib/format.js';
 import { validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 const INBOX_PLATFORMS = ['instagram', 'facebook', 'threads', 'linkedin'] as const;
@@ -31,21 +31,57 @@ type CommentsInput = {
   search?: string;
   limit?: number;
   offset?: number;
+  since?: string;
+  until?: string;
 };
+
+/** "on @account (Workspace)" for a list row, or null when the API sent neither. */
+function ownerLabel(row: Record<string, unknown>): string | null {
+  const account = typeof row.account_username === 'string' && row.account_username ? `@${row.account_username}` : '';
+  const workspace = typeof row.workspace_name === 'string' && row.workspace_name ? row.workspace_name : '';
+  if (account && workspace) return `on ${account} (${workspace})`;
+  if (account || workspace) return `on ${account || workspace}`;
+  return null;
+}
+
+/** One list line for a comment: when, account, author ("you" or "(no handle)" when needed), flags, text. */
+export function formatCommentListLine(comment: Record<string, unknown>): string {
+  const author = comment.author_is_business
+    ? 'you'
+    : typeof comment.author_username === 'string' && comment.author_username
+      ? `@${comment.author_username}`
+      : '(no handle)';
+  const platform = typeof comment.platform === 'string' ? comment.platform : 'unknown';
+  const flags: string[] = [];
+  if (comment.is_read === false) flags.push('unread');
+  if (comment.is_hidden) flags.push('hidden');
+  if (comment.is_flagged) flags.push('flagged');
+  const flagLabel = flags.length > 0 ? `, ${flags.join(', ')}` : '';
+  const text = truncateText(typeof comment.content === 'string' ? comment.content : '', 80);
+  const replies = Array.isArray(comment.replies) ? comment.replies.length : 0;
+  const when = typeof comment.posted_at === 'string' && comment.posted_at ? `[${formatLocalDateTime(comment.posted_at)}]` : null;
+  const owner = ownerLabel(comment);
+  const context = inboxCommentContext(comment);
+  const account = context.accountId ? `account ${context.accountId}` : null;
+  const post = context.caption ? `post: ${truncateText(context.caption, 80)}` : context.link ? `post: ${context.link}` : null;
+  return `- ${[String(comment.id), when].filter(Boolean).join(' ')} (${[platform, owner, account, author].filter(Boolean).join(', ')}${flagLabel}${replies ? `, ${replies} replies` : ''}): ${text}${post ? ` (${post})` : ''}`;
+}
 
 export const listCommentsTool = {
   name: 'list_comments',
   description:
-    'Social inbox comments and replies for Instagram, Facebook Pages, Threads, and LinkedIn Pages (Pro plan or higher plus posts:read). Without comment_id: list comments filtered by account, platform, unread/flagged, or search, with limit/offset paging. With comment_id: one comment and its replies; only workspace_id may be added.',
+    'Social inbox comments and replies for Instagram, Facebook Pages, Threads, and LinkedIn Pages (Pro plan or higher plus posts:read). Without comment_id: list comments filtered by account, platform, unread/flagged, search, or since/until dates, with limit/offset paging. With comment_id: one comment and its replies; only workspace_id may be added. YouTube and TikTok are refused rather than returned as an empty list. They stay off until each platform is reviewed and an inbox provider exists.',
   inputSchema: z.object({
-    comment_id: z.string().min(1).optional().describe('One comment (from a list call) with its replies.'),
-    workspace_id: z.string().optional().describe('Optional. Omit to search every workspace you belong to; pass a workspace ID from whoami to limit to one.'),
-    account_id: z.number().int().positive().optional().describe('Social account ID from list_accounts.'),
-    platform: z.enum(INBOX_PLATFORMS).optional().describe('instagram, facebook, threads, or linkedin.'),
-    filter: z.enum(['all', 'unread', 'flagged']).optional().describe('Comment filter. Defaults to all.'),
+    comment_id: z.string().min(1).optional().describe('One comment and its replies.'),
+    workspace_id: z.string().optional().describe('Omit to search all your workspaces, or pass an ID from whoami.'),
+    account_id: z.number().int().positive().optional().describe('From list_accounts.'),
+    platform: z.enum(INBOX_PLATFORMS).optional(),
+    filter: z.enum(['all', 'unread', 'flagged']).optional().describe('Default all.'),
     search: z.string().optional().describe('Search comment content or author username.'),
-    limit: z.number().int().min(1).max(100).optional().describe('Number of comments to return. Default 50, max 100.'),
-    offset: z.number().int().min(0).optional().describe('Skip this many comments before returning results.'),
+    limit: z.number().int().min(1).max(100).optional().describe('Rows to return. Default 50.'),
+    offset: z.number().int().min(0).optional().describe('Rows to skip.'),
+    since: z.string().optional().describe('ISO date/time, inclusive.'),
+    until: z.string().optional().describe('ISO date/time, inclusive.'),
   }),
   /** The old tools' exact input schemas, for alias calls (see alias-transport.ts). */
   legacySchemas: {
@@ -74,16 +110,7 @@ async function commentList(client: PosterlyClient, input: CommentsInput): Promis
 
   const lines = [`Inbox comments (showing ${result.comments.length} of ${result.total}):`];
   for (const comment of result.comments) {
-    const author = typeof comment.author_username === 'string' ? `@${comment.author_username}` : 'unknown';
-    const platform = typeof comment.platform === 'string' ? comment.platform : 'unknown';
-    const flags: string[] = [];
-    if (comment.is_read === false) flags.push('unread');
-    if (comment.is_hidden) flags.push('hidden');
-    if (comment.is_flagged) flags.push('flagged');
-    const flagLabel = flags.length > 0 ? `, ${flags.join(', ')}` : '';
-    const text = truncateText(typeof comment.content === 'string' ? comment.content : '', 80);
-    const replies = Array.isArray(comment.replies) ? comment.replies.length : 0;
-    lines.push(`- ${String(comment.id)} (${platform}, ${author}${flagLabel}${replies ? `, ${replies} replies` : ''}): ${text}`);
+    lines.push(formatCommentListLine(comment));
   }
 
   if (result.hasMore) {
@@ -109,6 +136,10 @@ async function oneComment(client: PosterlyClient, input: { comment_id: string; w
     `• Posted: ${formatLocalDateTime(typeof comment.posted_at === 'string' ? comment.posted_at : null)}`,
     `• Content: ${typeof comment.content === 'string' ? comment.content : '(empty)'}`,
   ];
+  const context = inboxCommentContext(comment);
+  if (context.accountId) lines.push(`• Account ID: ${context.accountId}`);
+  if (context.caption) lines.push(`• Post: ${context.caption}`);
+  if (context.link) lines.push(`• Post link: ${context.link}`);
   if (typeof comment.media_permalink === 'string') lines.push(`• Media: ${comment.media_permalink}`);
 
   const replies = Array.isArray(comment.replies) ? comment.replies : [];

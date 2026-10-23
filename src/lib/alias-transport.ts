@@ -33,6 +33,7 @@
 import type { Transport, TransportSendOptions } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage, MessageExtraInfo, RequestId } from '@modelcontextprotocol/sdk/types.js';
 import { claudeDirectoryDescription, claudeDirectorySchema, isClaudeDirectoryTool } from './claude-directory-profile.js';
+import { normalizeIdArgs } from './id-text.js';
 import {
   DEPRECATION_META_KEY,
   deprecationNote,
@@ -144,6 +145,9 @@ export class AliasTransport implements Transport {
     if (request.method !== 'tools/call' || request.id === undefined || request.id === null || !isObject(request.params)) {
       this.onmessage?.(message, extra);
       return;
+    }
+    if (Object.prototype.hasOwnProperty.call(request.params, 'arguments')) {
+      request.params = { ...request.params, arguments: normalizeIdArgs(request.params.arguments) };
     }
     const name = request.params.name;
     if (this.claudeDirectoryProfile && (typeof name !== 'string' || !isClaudeDirectoryTool(name))) {

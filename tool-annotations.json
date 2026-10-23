@@ -19,6 +19,7 @@
     "list_platforms",
     "trigger_platform_helper",
     "list_brands",
+    "manage_brand",
     "list_post_suggestions",
     "dismiss_suggestion",
     "list_posts",
@@ -49,6 +50,10 @@
     "manage_google_business_review",
     "list_google_business_media",
     "manage_google_business_media",
+    "list_google_business_service_areas",
+    "manage_google_business_service_area",
+    "list_google_business_locations",
+    "manage_google_business_location",
     "list_conversations",
     "manage_conversation",
     "list_comments",
@@ -63,7 +68,11 @@
     "pause_subscription",
     "resume_subscription",
     "downgrade_subscription",
-    "get_updates"
+    "upgrade_subscription",
+    "manage_extra_account",
+    "manage_x_posting_addon",
+    "get_updates",
+    "posterly_status"
   ],
   "readOnlyTools": [
     "get_agent_signup_info",
@@ -90,30 +99,39 @@
     "list_google_business_reviews",
     "audit_google_business_profile",
     "list_google_business_media",
+    "list_google_business_service_areas",
+    "list_google_business_locations",
     "list_conversations",
     "list_comments",
     "list_activity",
     "list_webhooks",
     "get_credits",
     "get_subscription",
-    "get_updates"
+    "get_updates",
+    "posterly_status"
   ],
   "destructiveTools": [
     "delete_api_key",
     "manage_workspace_member",
     "disconnect_account",
     "manage_oauth_client",
+    "manage_brand",
     "dismiss_suggestion",
     "update_post",
     "delete_post",
+    "upload_media",
     "manage_google_business_review",
     "manage_google_business_media",
+    "manage_google_business_location",
     "manage_comment",
     "manage_webhook",
     "cancel_subscription",
     "manage_publishing_pause",
     "pause_subscription",
-    "downgrade_subscription"
+    "downgrade_subscription",
+    "upgrade_subscription",
+    "manage_extra_account",
+    "manage_x_posting_addon"
   ],
   "idempotentMutationTools": [
     "delete_api_key",
@@ -125,7 +143,11 @@
     "cancel_subscription",
     "pause_subscription",
     "resume_subscription",
-    "downgrade_subscription"
+    "downgrade_subscription",
+    "upgrade_subscription",
+    "manage_extra_account",
+    "manage_google_business_service_area",
+    "manage_google_business_location"
   ],
   "openWorldTools": [
     "start_signup",
@@ -158,6 +180,10 @@
     "manage_google_business_review",
     "list_google_business_media",
     "manage_google_business_media",
+    "list_google_business_service_areas",
+    "manage_google_business_service_area",
+    "list_google_business_locations",
+    "manage_google_business_location",
     "manage_conversation",
     "manage_comment",
     "create_webhook",
@@ -168,6 +194,9 @@
     "pause_subscription",
     "resume_subscription",
     "downgrade_subscription",
+    "upgrade_subscription",
+    "manage_extra_account",
+    "manage_x_posting_addon",
     "delete_post",
     "submit_product_feedback"
   ]

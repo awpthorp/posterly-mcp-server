@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
-import { formatDate, mdEmpty, mdTable, mdTitle, starGlyphs } from '../lib/format.js';
+import { formatDate, formatIsoTimestamp, mdEmpty, mdTable, mdTitle, starGlyphs } from '../lib/format.js';
 
 const SUGGESTED_BASIS_LABELS: Record<string, string> = {
   yours: 'Based on your posts',
@@ -11,7 +11,7 @@ const SUGGESTED_BASIS_LABELS: Record<string, string> = {
 export const findSlotTool = {
   name: 'find_available_slot',
   description:
-    'Find available time slots for posting. Respects a 1-hour gap between posts and preferred hours (8am-10pm in the given timezone). Returns up to 10 slots. IMPORTANT: pass a timezone explicitly - default is America/New_York and slots will be off if the user is elsewhere. Pass workspace_id to only avoid collisions with posts in that workspace. strategy "best_engagement" (needs account_ids) ranks the next 7 days by when these accounts get the most engagement, with a 1-5 star rating and a reason per slot.',
+    'Find available time slots for posting. Respects a 1-hour gap between posts and preferred hours (8am-10pm in the given timezone). Returns up to 10 slots. IMPORTANT: pass a timezone explicitly - default is America/New_York and slots will be off if the user is elsewhere. Each slot includes the UTC instant to pass as scheduled_at. Pass workspace_id to only avoid collisions with posts in that workspace. strategy "best_engagement" (needs account_ids) ranks the next 7 days by when these accounts get the most engagement, with a 1-5 star rating and a reason per slot.',
   inputSchema: z.object({
     account_ids: z
       .array(z.string())
@@ -69,10 +69,11 @@ export const findSlotTool = {
         // local_time already carries the date in the requested timezone, so
         // no separate Date column (a machine-local date could disagree).
         mdTable(
-          ['Option', 'Local time', 'Rating', 'Why'],
+          ['Option', 'Local time', 'UTC', 'Rating', 'Why'],
           slots.map((slot, index) => [
             index + 1,
             slot.local_time,
+            slot.time ? formatIsoTimestamp(slot.time) : 'n/a',
             starGlyphs(slot.stars, slot.basis === 'default'),
             slot.reason || 'n/a',
           ]),
@@ -89,13 +90,15 @@ export const findSlotTool = {
     return [
       mdTitle(`Available posting slots (${slots.length})`),
       mdTable(
-        ['Option', 'Local time', 'Date'],
+        ['Option', 'Local time', 'Date', 'UTC'],
         slots.map((slot, index) => [
           index + 1,
           slot.local_time,
           formatDate(slot.time),
+          formatIsoTimestamp(slot.time),
         ]),
       ),
+      'Pass the UTC value to create_post as scheduled_at. Local time uses the timezone you passed. If you left timezone out, that zone is America/New_York.',
     ].join('\n\n');
   },
 };

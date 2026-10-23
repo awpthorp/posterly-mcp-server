@@ -11,6 +11,7 @@ import { CLAUDE_DIRECTORY_INSTRUCTIONS, isClaudeDirectoryTool } from './lib/clau
 import { McpError, ErrorCode } from '@modelcontextprotocol/sdk/types.js';
 import { AliasTransport, type LegacyAliasValidator } from './lib/alias-transport.js';
 import { StdioPreviewTokens } from './lib/preview-token.js';
+import { loosenIdObject, loosenIdShape } from './lib/id-schema.js';
 import { parseToolsets, toolsetInstructions, visibleTools, type ToolRegistry } from './lib/tool-registry.js';
 import type { ToolContext } from './lib/tool-runtime.js';
 import { getAgentSignupInfoTool } from './tools/get-agent-signup-info.js';
@@ -28,16 +29,20 @@ import { manageWorkspaceMemberTool } from './tools/manage-workspace-member.js';
 import { listPublishingPausesTool } from './tools/list-publishing-pauses.js';
 import { managePublishingPauseTool } from './tools/manage-publishing-pause.js';
 import { getCreditsTool } from './tools/get-credits.js';
+import { posterlyStatusTool } from './tools/posterly-status.js';
 import { getSubscriptionTool } from './tools/get-subscription.js';
 import { cancelSubscriptionTool } from './tools/cancel-subscription.js';
 import { pauseSubscriptionTool } from './tools/pause-subscription.js';
 import { resumeSubscriptionTool } from './tools/resume-subscription.js';
 import { downgradeSubscriptionTool } from './tools/downgrade-subscription.js';
+import { upgradeSubscriptionTool } from './tools/upgrade-subscription.js';
+import { manageExtraAccountTool } from './tools/manage-extra-account.js';
 import { listOAuthClientsTool } from './tools/list-oauth-clients.js';
 import { manageOAuthClientTool } from './tools/manage-oauth-client.js';
 import { listPlatformsTool } from './tools/list-platforms.js';
 import { triggerPlatformHelperTool } from './tools/trigger-platform-helper.js';
 import { listBrandsTool } from './tools/list-brands.js';
+import { manageBrandsTool } from './tools/manage-brands.js';
 import { listPostSuggestionsTool } from './tools/list-post-suggestions.js';
 import { dismissSuggestionTool } from './tools/dismiss-suggestion.js';
 import { submitAgentFeedbackTool } from './tools/submit-agent-feedback.js';
@@ -67,6 +72,10 @@ import { auditGoogleBusinessProfileTool } from './tools/audit-google-business-pr
 import { manageGoogleBusinessReviewTool } from './tools/manage-google-business-review.js';
 import { listGoogleBusinessMediaTool } from './tools/list-google-business-media.js';
 import { manageGoogleBusinessMediaTool } from './tools/manage-google-business-media.js';
+import { listGoogleBusinessServiceAreasTool } from './tools/list-google-business-service-areas.js';
+import { manageGoogleBusinessServiceAreaTool } from './tools/manage-google-business-service-area.js';
+import { listGoogleBusinessLocationsTool } from './tools/list-google-business-locations.js';
+import { manageGoogleBusinessLocationTool } from './tools/manage-google-business-location.js';
 import { listConversationsTool } from './tools/list-conversations.js';
 import { manageConversationTool } from './tools/manage-conversation.js';
 import { listCommentsTool } from './tools/list-comments.js';
@@ -77,6 +86,7 @@ import { listWebhooksTool } from './tools/list-webhooks.js';
 import { createWebhookTool } from './tools/create-webhook.js';
 import { manageWebhookTool } from './tools/manage-webhook.js';
 import { getXPostingQuotaTool } from './tools/get-x-posting-quota.js';
+import { manageXPostingAddonTool } from './tools/manage-x-posting-addon.js';
 
 /**
  * One tool module per file in ./tools. `execute` takes the shared client,
@@ -119,11 +129,14 @@ const STDIO_TOOLS: ToolModule[] = [
   pauseSubscriptionTool,
   resumeSubscriptionTool,
   downgradeSubscriptionTool,
+  upgradeSubscriptionTool,
+  manageExtraAccountTool,
   listOAuthClientsTool,
   manageOAuthClientTool,
   listPlatformsTool,
   triggerPlatformHelperTool,
   listBrandsTool,
+  manageBrandsTool,
   listPostSuggestionsTool,
   dismissSuggestionTool,
   submitAgentFeedbackTool,
@@ -153,6 +166,10 @@ const STDIO_TOOLS: ToolModule[] = [
   manageGoogleBusinessReviewTool,
   listGoogleBusinessMediaTool,
   manageGoogleBusinessMediaTool,
+  listGoogleBusinessServiceAreasTool,
+  manageGoogleBusinessServiceAreaTool,
+  listGoogleBusinessLocationsTool,
+  manageGoogleBusinessLocationTool,
   listConversationsTool,
   manageConversationTool,
   listCommentsTool,
@@ -163,6 +180,8 @@ const STDIO_TOOLS: ToolModule[] = [
   createWebhookTool,
   manageWebhookTool,
   getXPostingQuotaTool,
+  manageXPostingAddonTool,
+  posterlyStatusTool,
 ];
 
 // The tool registry (sets, labels, aliases) ships at the package root next to
@@ -212,7 +231,7 @@ setMcpClientNameResolver(() => server.server.getClientVersion()?.name);
 // modules that replaced them.
 const LEGACY_SCHEMAS = new Map<string, z.ZodTypeAny>();
 for (const tool of STDIO_TOOLS) {
-  for (const [alias, schema] of Object.entries(tool.legacySchemas ?? {})) LEGACY_SCHEMAS.set(alias, schema);
+  for (const [alias, schema] of Object.entries(tool.legacySchemas ?? {})) LEGACY_SCHEMAS.set(alias, loosenIdObject(schema));
 }
 
 /**
@@ -252,7 +271,7 @@ function registerAll(tools: ToolModule[]): void {
     server.tool(
       tool.name,
       tool.description,
-      tool.inputSchema.shape,
+      loosenIdShape(tool.inputSchema.shape),
       getToolAnnotations(tool.name),
       async (input, extra) => {
         // The CALLED name (an alias, or the tool itself) is what telemetry

@@ -23,14 +23,16 @@ export function formatApiAccess(member: { role?: string | null; api_access?: boo
 function formatWorkspaceMembers(result: WorkspaceMembersResponse): string {
   const members = result.members || [];
   const invites = result.invites || [];
+  const showUserId = members.some((member) => member.user_id);
   return [
     mdTitle(`Team (${members.length} members, ${invites.length} pending invites)`, `Workspace ${result.workspace_id}`),
     mdSection('Members', members.length > 0
       ? mdTable(
-          ['Name', 'Member ID', 'Email', 'Role', 'Status', 'Brands', 'API access'],
+          ['Name', 'Member ID', ...(showUserId ? ['User ID'] : []), 'Email', 'Role', 'Status', 'Brands', 'API access'],
           members.map((member) => [
             member.name || member.email || member.id,
             code(member.id),
+            ...(showUserId ? [member.user_id ? code(String(member.user_id)) : 'n/a'] : []),
             member.email,
             member.role,
             member.status,

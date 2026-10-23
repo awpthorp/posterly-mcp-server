@@ -12,8 +12,8 @@ The installable package is [`posterly-mcp-server` on npm](https://www.npmjs.com/
 
 - Node.js 20 or newer, for the local `npx` server.
 - A posterly plan with API and MCP access for authenticated tools.
-- New accounts that start from [poster.ly/mcp](https://www.poster.ly/mcp) pay for a plan and API and MCP in one Stripe subscription, charged immediately. That path has no free trial. Starter + API is $10/month.
-- The add-on on its own is $3/month on Starter and Pro, $5/month on Power, and $29/month on Agency. Base plans start at $7/month. Combined monthly totals are $10, $18, $30, and $78.
+- New accounts that start from [poster.ly/mcp](https://www.poster.ly/mcp) get a plan and API and MCP in one Stripe subscription, with a 7-day free trial. A card is required and is charged on day 8 unless the paid plan starts sooner. An account that already had a trial is charged at checkout. Starter + API is $10/month.
+- The add-on on its own is $3/month on Starter, $4/month on new Pro (existing Pro customers stay at $3/month), $5/month on Power, and $29/month on Agency. Base plans start at $7/month. Combined monthly totals are $10, $19, $30, and $78.
 - After checkout, create a key at [Dashboard, API and MCP](https://www.poster.ly/dashboard/api) if your client needs one. Hosted OAuth connectors sign in instead of pasting a key.
 
 User-created API keys: Starter 1, Pro 2, Power 3, Agency 4.
@@ -36,7 +36,7 @@ curl -s https://www.poster.ly/api/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-Hosted tool calls are JSON only. Chat attachments never reach posterly. On ChatGPT web, Claude.ai, and Gemini web, ask for `create_media_drop`, open the returned `https://www.poster.ly/drop/...` link, then call `list_media`. Clients that can upload bytes (Cursor, Claude Code, Codex) can use `create_signed_upload` and PUT the file to the returned `upload_url`. Small images can use `upload_media`.
+Hosted tool calls are JSON only. Chat attachments never reach posterly. On ChatGPT web, Claude.ai, and Gemini web, ask for `create_media_drop`, open the returned `https://www.poster.ly/drop/...` link (up to 20 files per link), then call `list_media`. Clients that can upload bytes (Cursor, Claude Code, Codex) can use `create_signed_upload` (1 to 20 files per call) and PUT each file to its returned `upload_url`. Small images can use `upload_media`.
 
 Create-post calls are limited to 100 requests per hour per key. `create_posts_batch` takes up to 25 posts in one confirmed request. Media writes and reads have separate limits.
 

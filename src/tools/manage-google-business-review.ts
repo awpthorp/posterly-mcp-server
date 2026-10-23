@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import type { PosterlyClient } from '../lib/api-client.js';
 import { code, mdKeyValue, mdQuote, mdSection } from '../lib/format.js';
-import { omitKeys, previewThenConfirm, validateArgs, type ToolContext } from '../lib/tool-runtime.js';
+import { reviewNameFromListItem, reviewReplyComment } from '../lib/google-business-review-name.js';
+import { omitKeys, previewThenConfirm, readForPreview, validateArgs, type ToolContext } from '../lib/tool-runtime.js';
 
 const LOCATION_ID_DESCRIPTION = 'Google Business numeric location id (the location_id/platform_user_id from list_accounts, e.g. "197940849675145390"). NOT the ChIJ... Place ID from list_google_business_reviews view=review_link. Prefer account_id.';
 const LEGACY_LOCATION = {
@@ -32,6 +33,31 @@ function payloadOf(input: ManageReviewInput): Record<string, any> {
   return omitKeys(input, ['action', 'confirm', 'preview_id']);
 }
 
+async function lookupReview(client: PosterlyClient, call: ManageReviewInput): Promise<any | null> {
+  const read = await readForPreview(() => client.listGoogleBusinessReviews({
+    workspace_id: call.workspace_id,
+    account_id: call.account_id,
+    location_id: call.location_id,
+    limit: 200,
+  }));
+  if (!read.ok || !Array.isArray(read.data?.reviews)) return null;
+  const wanted = String(call.review_name || '');
+  return read.data.reviews.find((review: any) => reviewNameFromListItem(review) === wanted || review?.name === wanted) || null;
+}
+
+function reviewPreviewRows(call: ManageReviewInput, review: any | null): Array<[string, string | undefined]> {
+  if (!review) return [['Review', code(String(call.review_name))], ...locationRows(call)];
+  const existing = reviewReplyComment(review);
+  return [
+    ['Reviewer', review.reviewer?.displayName || 'Anonymous'],
+    ['Rating', review.starRating ? `${review.starRating} stars` : 'unrated'],
+    ['Review', review.comment ? String(review.comment).replace(/\s+/g, ' ').trim() : '(rating only)'],
+    ['Existing reply', existing || (review.reviewReply ? 'replied' : 'none')],
+    ['Review', code(String(call.review_name))],
+    ...locationRows(call),
+  ];
+}
+
 function locationRows(input: ManageReviewInput): Array<[string, string | undefined]> {
   return [
     ['Account ID', input.account_id !== undefined ? code(input.account_id) : undefined],
@@ -43,13 +69,13 @@ function locationRows(input: ManageReviewInput): Array<[string, string | undefin
 export const manageGoogleBusinessReviewTool = {
   name: 'manage_google_business_review',
   description:
-    'Act on Google Business Profile reviews. action=suggest_reply (star_rating, optional review_text): short, brand-aware AI reply suggestions; uses the AI Caption Assist allowance and never posts. action=reply (review_name, comment): post or update the owner reply. action=delete_reply (review_name): delete the owner reply. reply and delete_reply use preview then confirm: call without confirm to get a preview and preview_id (it repeats the review name, location, and exact reply text; show the reviewer, rating, and review text from list_google_business_reviews alongside it), then call again with confirm=true and that preview_id.',
+    'Act on Google Business Profile reviews. action=suggest_reply (star_rating, optional review_text): short, brand-aware AI reply suggestions; uses the AI Caption Assist allowance and never posts. action=reply (review_name, comment): post or update the owner reply. action=delete_reply (review_name): delete the owner reply. reply and delete_reply use preview then confirm: call without confirm to get a preview and preview_id (it repeats the review name, location, and exact reply text; show the reviewer, rating, and review text alongside it), then call again with confirm=true and that preview_id.',
   inputSchema: z.object({
     action: z.enum(['suggest_reply', 'reply', 'delete_reply']).describe('suggest_reply, reply, or delete_reply.'),
     workspace_id: z.string().optional().describe('Filter to a workspace ID from whoami.'),
     account_id: z.number().int().positive().optional().describe('Google Business account ID from list_accounts (optional brand voice context for suggest_reply).'),
     location_id: z.string().optional().describe(LOCATION_ID_DESCRIPTION),
-    review_name: z.string().min(1).optional().describe('reply and delete_reply: full Google review resource name.'),
+    review_name: z.string().min(1).optional().describe('reply and delete_reply: review_name from list_google_business_reviews.'),
     comment: z.string().min(1).max(4096).optional().describe('reply: exact owner reply text to post.'),
     review_text: z.string().optional().describe('suggest_reply: review text. Leave empty for rating-only reviews.'),
     star_rating: z.number().min(1).max(5).optional().describe('suggest_reply: review rating from 1 to 5.'),
@@ -97,7 +123,7 @@ export const manageGoogleBusinessReviewTool = {
         legacyRefusal: 'Refusing to delete a Google review reply without confirm=true after explicit user confirmation.',
         ctx,
         describe: async () => [
-          mdSection('Review', mdKeyValue([['Review', code(String(call.review_name))], ...locationRows(call)])),
+          mdSection('Review', mdKeyValue(reviewPreviewRows(call, await lookupReview(client, call)))),
           'This deletes the owner reply from this review on Google. The review itself stays.',
         ].join('\n\n'),
         run: async () => {
@@ -114,7 +140,7 @@ export const manageGoogleBusinessReviewTool = {
       legacyRefusal: 'Refusing to post a Google review reply without confirm=true after explicit user confirmation.',
       ctx,
       describe: async () => [
-        mdSection('Review', mdKeyValue([['Review', code(String(call.review_name))], ...locationRows(call)])),
+        mdSection('Review', mdKeyValue(reviewPreviewRows(call, await lookupReview(client, call)))),
         mdSection('Owner reply to post', mdQuote(String(call.comment ?? ''))),
         'This posts publicly on Google as the business owner and replaces any existing owner reply on this review.',
       ].join('\n\n'),
