@@ -84,7 +84,7 @@ export const manageGoogleBusinessLocationTool = {
           return [
             mdSection('Current values', current ? gbpAttributeLines(current, 'None of these attributes is set now.') : locationReadNote(read.ok ? 'no attributes returned' : read.error)),
             mdSection('Attributes to set', [gbpAttributeLines(call.attributes, 'No attributes were sent.'), '', mdKeyValue(locationRows(call))].join('\n')),
-            'This replaces those attributes on the public Google Business profile. Other attributes are left as they are. Nothing is sent until you confirm, and the edit stays off until location edits are switched on.',
+            'This replaces those attributes on the public Google Business profile. Other attributes are left as they are. Nothing is sent until you confirm.',
           ].join('\n\n');
         },
         run: async () => {
@@ -106,7 +106,7 @@ export const manageGoogleBusinessLocationTool = {
         return [
           mdSection('Current regular hours', current ? gbpPeriodLines(current, 'No regular hours are saved now.') : locationReadNote(read.ok ? 'no hours returned' : read.error)),
           mdSection('Regular hours to set', [gbpPeriodLines(call.regular_hours?.periods, 'No opening periods were sent.'), '', GBP_CLOSED_DAYS_NOTE, '', mdKeyValue(locationRows(call))].join('\n')),
-          'This replaces the regular opening hours on the public Google Business profile. Nothing is sent until you confirm, and the edit stays off until location edits are switched on.',
+          'This replaces the regular opening hours on the public Google Business profile. Nothing is sent until you confirm.',
         ].join('\n\n');
       },
       run: async () => {

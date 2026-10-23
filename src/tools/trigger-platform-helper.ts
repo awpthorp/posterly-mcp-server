@@ -16,7 +16,10 @@ export const triggerPlatformHelperTool = {
       .enum(SUPPORTED_PLATFORM_INPUTS)
       .optional()
       .describe(`Platform hint when no account_id is supplied. Supported: ${SUPPORTED_PLATFORM_IDS.join(', ')}.`),
-    params: z.record(z.string(), z.unknown()).optional(),
+    params: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Helper inputs. linkedin.company_lookup needs { vanity: the company vanity name or company page URL }.'),
   }),
 
   async execute(
